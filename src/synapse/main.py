@@ -149,6 +149,85 @@ async def run_map_phase(
     return processed_stats['processed'], processed_stats['failed']
 
 
+async def run_reduce_phase(
+    map_output_paths: list[Path],
+    output_file: Path,
+    agent: Agent,
+    prompt_template: str,
+):
+    """Consolidate map outputs and generate final profiles via LLM.
+
+    Args:
+        map_output_paths: List of .map.md files produced by the Map phase.
+        output_file: Path where the final consolidated Markdown should be written.
+        agent: A configured pydantic_ai Agent prepared with the reduce system prompt.
+        prompt_template: The reduce user message template containing the placeholder
+            "{{CONCATENATED_MARKDOWN_BLOCKS_HERE}}" to be replaced with the joined
+            map outputs.
+
+    Returns:
+        bool: True if LLM generation and file write succeeded, False otherwise.
+    """
+
+    # 1) Read and concatenate map outputs --------------------------------------------------
+    concatenated_blocks: list[str] = []
+
+    for path in map_output_paths:
+        try:
+            content = await path.read_text(encoding='utf-8')
+
+            # Skip trivial/no-person outputs to avoid polluting reduce prompt
+            if content.strip() == 'No key persons identified in this transcript.':
+                logfire.debug(
+                    'Skipping empty/no-person map output: {path}',
+                    path=str(path)
+                )
+                continue
+
+            concatenated_blocks.append(content.strip())
+        except Exception as e:
+            logfire.warn(
+                'Failed to read map output {path}: {error}', path=str(path), error=str(e)
+            )
+
+    concatenated_text = "\n\n".join(concatenated_blocks)
+
+    if not concatenated_text:
+        logfire.warning(
+            'No valid map outputs to process for reduce phase. Creating fallback output.'
+        )
+
+    # 2) Prepare user prompt ---------------------------------------------------------------
+    if "{{CONCATENATED_MARKDOWN_BLOCKS_HERE}}" in prompt_template:
+        user_prompt = prompt_template.replace("{{CONCATENATED_MARKDOWN_BLOCKS_HERE}}", concatenated_text)
+    else:
+        # Graceful fallback: naive .format call if template uses {blocks}
+        try:
+            user_prompt = prompt_template.format(CONCATENATED_MARKDOWN_BLOCKS_HERE=concatenated_text)
+        except KeyError:
+            # Last-ditch: append the blocks to the end of prompt
+            user_prompt = f"{prompt_template}\n\n{concatenated_text}"
+
+    # 3) Generate reduce output via LLM ----------------------------------------------------
+    with logfire.span('reduce_phase_generate'):
+        try:
+            result = await agent.run(user_prompt)
+        except Exception as e:
+            logfire.error('Error during reduce agent run: {error}', error=str(e), exc_info=True)
+            return False
+
+    reduce_output_content = result.output
+
+    # 4) Ensure output directory exists and write file ------------------------------------
+    try:
+        await output_file.parent.mkdir(exist_ok=True, parents=True)
+        await output_file.write_text(reduce_output_content, encoding='utf-8')
+        logfire.info('Successfully wrote reduce output to {output_file}', output_file=str(output_file))
+        return True
+    except Exception as e:
+        logfire.error('Failed to write reduce output: {error}', error=str(e), exc_info=True)
+        return False
+
 async def main():
     """Main execution function for the Map Phase."""
     global config
@@ -156,7 +235,7 @@ async def main():
     # Load configuration asynchronously
     config = SynapseSettings()
     
-    logfire.info('--- Starting Project Synapse: Map Phase ---')
+    logfire.info('=== Project Synapse: Map Phase ===')
 
     # --- Configuration Setup ---
     # Use the configuration loaded from config.py
@@ -211,12 +290,68 @@ async def main():
             concurrency=concurrency
         )
 
-    # --- Summary ---
+    # --- Map Phase Summary ---
     logfire.info('--- Map Phase Complete ---')
     logfire.info('Successfully processed: {count}', count=processed_count)
     logfire.info('Failed to process: {count}', count=failed_count)
     logfire.info('Map outputs saved to: {output_dir}', output_dir=str(output_dir))
-    logfire.info('--------------------------')
+
+    # Abort reduce phase if all map transcripts failed or produced nothing
+    if processed_count == 0 or (processed_count == failed_count):
+        logfire.warning('No map outputs generated; skipping reduce phase.')
+        return
+
+    # -------------------- REDUCE PHASE --------------------
+
+    logfire.info('=== Project Synapse: Reduce Phase ===')
+
+    # Prepare paths for reduce phase
+    reduce_input_dir = Path(config.reduce_phase.input_map_dir)
+    reduce_output_file = Path(config.reduce_phase.output_reduce_file)
+
+    prompt_config_path_reduce = Path(config.reduce_phase.prompt_config_path)
+
+    # Even if map and reduce share prompt.yaml, we reload to avoid accidental mismatch
+    try:
+        prompt_config_model_reduce = await load_prompt_config(prompt_config_path_reduce)
+    except SystemExit:
+        # load_prompt_config already logs error. Abort reduce phase gracefully.
+        return
+
+    reduce_system_prompt = prompt_config_model_reduce.reduce_prompt.system_message
+    reduce_user_template = prompt_config_model_reduce.reduce_prompt.user_message_template
+
+    reduce_agent = Agent(
+        model=model_name,
+        instructions=reduce_system_prompt,
+    )
+
+    # Locate map output files to feed into reduce phase
+    try:
+        map_output_files = [p for p in await reduce_input_dir.glob('*.map.md')]
+        if not map_output_files:
+            logfire.warning('No .map.md files found for reduce phase in {dir}', dir=str(reduce_input_dir))
+            return
+        logfire.info('Found {count} map outputs for reduce phase.', count=len(map_output_files))
+    except Exception as e:
+        logfire.error('Error scanning map output directory {dir}: {error}', dir=str(reduce_input_dir), error=str(e), exc_info=True)
+        return
+
+    # Run reduce phase
+    with logfire.span('run_reduce_phase'):
+        success = await run_reduce_phase(
+            map_output_paths=map_output_files,
+            output_file=reduce_output_file,
+            agent=reduce_agent,
+            prompt_template=reduce_user_template,
+        )
+
+    # --- Reduce Summary ---
+    if success:
+        logfire.info('--- Reduce Phase Complete ---')
+        logfire.info('Reduce output saved to: {file}', file=str(reduce_output_file))
+    else:
+        logfire.error('Reduce phase failed.')
 
 def run_main():
     """Entry point for the CLI script."""

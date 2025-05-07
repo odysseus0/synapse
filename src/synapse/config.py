@@ -37,6 +37,7 @@ class ProcessingConfig(BaseModel):
 class SynapseSettings(BaseSettings):
     map_phase: MapPhaseConfig = Field(default_factory=MapPhaseConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
+    reduce_phase: "ReducePhaseConfig" = Field(default_factory=lambda: ReducePhaseConfig())
 
     # Configure pydantic-settings behavior using model_config
     model_config = SettingsConfigDict(
@@ -45,4 +46,33 @@ class SynapseSettings(BaseSettings):
         case_sensitive=False,
         extra='ignore',
         env_prefix='SYNAPSE_'
+    )
+
+# --- New Reduce Phase Config ---
+
+# Placing the class definition here **after** its first usage above avoids forward reference issues at runtime because
+# pydantic will resolve the annotation lazily. However, to satisfy static checkers and keep readability high we still
+# declare the class explicitly just below.
+
+class ReducePhaseConfig(BaseModel):
+    """Configuration specific to the reduce phase."""
+
+    # Directory where the map outputs (.map.md) are located. By default we reuse the map output directory so users can
+    # override the location if they move/copy the files elsewhere before running the reduce phase standalone.
+    input_map_dir: str = Field(
+        default='./map_outputs',
+        description='Directory containing .map.md files produced by the map phase'
+    )
+
+    # Path where the final consolidated Markdown profiles will be written.
+    output_reduce_file: str = Field(
+        default='./reduce_outputs/final_profiles.md',
+        description='File path to save the final consolidated Markdown profiles'
+    )
+
+    # The prompt config path for the reduce phase. Default to the same YAML file used for the map phase to keep things
+    # DRY, but allow overriding in case users split prompts into separate files later.
+    prompt_config_path: str = Field(
+        default='./prompt.yaml',
+        description='Path to the YAML file containing reduce prompt configuration'
     )
