@@ -22,6 +22,13 @@ class MapPhaseConfig(BaseModel):
         description='Path to the YAML file containing prompt configuration'
     )
 
+class ReducePhaseConfig(BaseModel):
+    """Configuration specific to the reduce phase."""
+    output_file: str = Field(
+        default='./reduce_outputs/final_profiles.md',
+        description='File path to save the reduce phase consolidated Markdown profiles'
+    )
+
 class ProcessingConfig(BaseModel):
     """Configuration for processing parameters."""
     concurrency: int = Field(
@@ -36,6 +43,7 @@ class ProcessingConfig(BaseModel):
 
 class SynapseSettings(BaseSettings):
     map_phase: MapPhaseConfig = Field(default_factory=MapPhaseConfig)
+    reduce_phase: ReducePhaseConfig = Field(default_factory=ReducePhaseConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
 
     # Configure pydantic-settings behavior using model_config
