@@ -1,4 +1,5 @@
 {
-  "snapshot": "snapshot-20250507-d524ed83-7b5f-4485-ab4e-67061115b074",
+  "snapshot": "snapshot-20250507-87bc9cf0-855d-4353-9e94-03aadbb67f8b",
+  "start": "uv sync",
   "terminals": []
 }
