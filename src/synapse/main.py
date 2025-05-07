@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 
 import logfire
 import trio
@@ -10,7 +11,7 @@ from trio import Path  # Use trio.Path for all file operations
 
 from synapse.config import SynapseSettings
 
-logfire.configure(scrubbing=False, token='REMOVED_API_KEY')
+logfire.configure(scrubbing=False)
 logfire.instrument_pydantic_ai()
 
 
@@ -149,6 +150,78 @@ async def run_map_phase(
     return processed_stats['processed'], processed_stats['failed']
 
 
+async def run_reduce_phase(
+    map_output_dir: Path,
+    reduced_output_file: Path
+) -> None:
+    """
+    Combines all .map.md files from the map phase into a single Markdown file.
+
+    Args:
+        map_output_dir: Directory containing the .map.md output files.
+        reduced_output_file: Path to the final combined Markdown file.
+    """
+    logfire.info('--- Starting Reduce Phase ---')
+    logfire.info(f'Reading map outputs from: {map_output_dir}')
+    logfire.info(f'Writing reduced output to: {reduced_output_file}')
+
+    markdown_files = [p for p in await map_output_dir.glob('*.map.md')]
+
+    if not markdown_files:
+        logfire.warn(f'No .map.md files found in {map_output_dir}. Skipping reduce phase.')
+        logfire.info('--- Reduce Phase Complete (Skipped) ---')
+        return
+
+    # Chronological sorting of map outputs
+    parsed_files_with_dt: list[tuple[datetime, Path]] = []
+    unparseable_files_by_name: list[Path] = []
+
+    for md_file_path_item in markdown_files:
+        filename = md_file_path_item.name
+        timestamp_str = filename[:16] # Expected: "YYYY-MM-DD HH_MM"
+        try:
+            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d %H_%M')
+            parsed_files_with_dt.append((dt_obj, md_file_path_item))
+        except ValueError:
+            logfire.warn(
+                f'Could not parse timestamp from filename: {filename}. '
+                f'It will be sorted by name after chronologically sorted items.'
+            )
+            unparseable_files_by_name.append(md_file_path_item)
+
+    parsed_files_with_dt.sort(key=lambda item: item[0]) # Sort by datetime
+    unparseable_files_by_name.sort() # Sort by Path (name)
+
+    final_sorted_file_list = [item[1] for item in parsed_files_with_dt] + unparseable_files_by_name
+    
+    all_content: list[str] = []
+    for md_file_path in final_sorted_file_list:
+        try:
+            file_name_prefix = md_file_path.name.removesuffix('.map.md')
+            content: str = await md_file_path.read_text(encoding='utf-8')
+            # Prepend filename and a separator to the content
+            all_content.append(f'## Source: {file_name_prefix}\n\n{content}')
+            logfire.info(f'Successfully read and processed {md_file_path} with prefix')
+        except Exception as e:
+            logfire.error(f'Error reading file {md_file_path}: {e}', exc_info=True)
+    
+    # Ensure output directory for the reduced file exists
+    await reduced_output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Concatenate content with a separator (e.g., double newline)
+    final_markdown = '\n\n---\n\n'.join(all_content) # Using --- as a more distinct separator
+
+    try:
+        await reduced_output_file.write_text(final_markdown, encoding='utf-8')
+        logfire.info(f'Successfully wrote combined output to {reduced_output_file}')
+    except Exception as e:
+        logfire.error(f'Error writing combined output to {reduced_output_file}: {e}', exc_info=True)
+        sys.exit(1)
+
+    logfire.info(f'Combined {len(all_content)} map files into {reduced_output_file}')
+    logfire.info('--- Reduce Phase Complete ---')
+
+
 async def main():
     """Main execution function for the Map Phase."""
     global config
@@ -217,6 +290,11 @@ async def main():
     logfire.info('Failed to process: {count}', count=failed_count)
     logfire.info('Map outputs saved to: {output_dir}', output_dir=str(output_dir))
     logfire.info('--------------------------')
+
+    # --- Reduce Phase ---
+    reduced_output_path = Path(config.reduce_phase.output_markdown_file)
+    await run_reduce_phase(map_output_dir=output_dir, reduced_output_file=reduced_output_path)
+    # --- End Reduce Phase ---
 
 def run_main():
     """Entry point for the CLI script."""
