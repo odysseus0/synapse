@@ -10,7 +10,7 @@ from trio import Path  # Use trio.Path for all file operations
 
 from synapse.config import SynapseSettings
 
-logfire.configure(scrubbing=False, console=False, token='pylf_v1_us_h899YsnvxK4jGtjBtcD9fmD2B8dJFKLMsWGpJq1T4Xnn')
+logfire.configure(scrubbing=False, token='pylf_v1_us_h899YsnvxK4jGtjBtcD9fmD2B8dJFKLMsWGpJq1T4Xnn')
 logfire.instrument_pydantic_ai()
 
 
@@ -217,6 +217,10 @@ async def main():
     logfire.info('Failed to process: {count}', count=failed_count)
     logfire.info('Map outputs saved to: {output_dir}', output_dir=str(output_dir))
     logfire.info('--------------------------')
+
+def run_main():
+    """Entry point for the CLI script."""
+    trio.run(main)
 
 if __name__ == '__main__':
     trio.run(main)
