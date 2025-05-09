@@ -1,286 +1,81 @@
-import sys
-from datetime import datetime
+"""
+Synapse: Main execution module.
 
+This module is the entry point for the Synapse application, orchestrating
+the map and reduce phases for analyzing meeting transcripts.
+"""
 import logfire
 import trio
-import yaml
-from pydantic import BaseModel, ValidationError
-from pydantic_ai import Agent
-from rich.progress import Progress
-from trio import Path  # Use trio.Path for all file operations
+from trio import Path
 
 from synapse.config import SynapseSettings
-
-logfire.configure(scrubbing=False)
-logfire.instrument_pydantic_ai()
-
-
-class PromptDetail(BaseModel):
-    system_message: str
-    user_message_template: str
-
-
-class PromptConfig(BaseModel):
-    map_prompt: PromptDetail
-    reduce_prompt: PromptDetail
-
-
-async def load_prompt_config(filepath: Path) -> PromptConfig:
-    """Loads prompt configuration from a YAML file and validates with Pydantic."""
-    try:
-        async with await trio.open_file(filepath, 'r', encoding='utf-8') as f:
-            content = await f.read()
-            data = yaml.safe_load(content)
-        
-        if not data:
-            raise ValueError('Prompt config file is empty.')
-
-        # Validate and parse the data using Pydantic model
-        config = PromptConfig(**data)
-        
-        logfire.info('Successfully loaded and validated prompt config from {filepath}', filepath=str(filepath))
-        return config
-    except FileNotFoundError:
-        logfire.error('Prompt configuration file not found: {filepath}', filepath=str(filepath))
-        sys.exit(1)
-    except ValidationError as e:
-        logfire.error('Error validating prompt configuration from {filepath}: {error}', filepath=str(filepath), error=str(e), exc_info=True)
-        sys.exit(1)
-    except Exception as e:
-        logfire.error('Error loading prompt configuration from {filepath}: {error}', filepath=str(filepath), error=str(e), exc_info=True)
-        sys.exit(1)
-
-# Pydantic model is not needed for the AI output here,
-# as we are instructing the AI to return raw Markdown text.
-
-async def run_map_phase(
-    transcript_paths: list[Path],
-    output_dir: Path,
-    agent: Agent,
-    prompt_template: str,
-    concurrency: int
-) -> tuple[int, int]:
-    """
-    Processes transcript files concurrently to generate Map phase Markdown outputs.
-
-    Args:
-        transcript_paths: List of paths to input transcript files.
-        output_dir: Path to the directory where map outputs will be saved.
-        agent: The configured pydantic_ai Agent.
-        prompt_template: The user message template string with placeholders.
-        concurrency: Maximum number of concurrent processing tasks.
-
-    Returns:
-        A tuple containing (number_of_files_processed, number_of_files_failed).
-    """
-    processed_stats = {'processed': 0, 'failed': 0}
-    send_channel, receive_channel = trio.open_memory_channel[Path](0)
-
-    async def map_worker(worker_receive_channel: trio.MemoryReceiveChannel[Path]):
-        """Worker task to process one transcript file."""
-        async for transcript_path in worker_receive_channel:
-            relative_path_str = str(transcript_path)
-            output_filename = transcript_path.name.replace('.txt', '.map.md') # Simple naming convention
-            output_path = output_dir / output_filename
-
-            with logfire.span('process_transcript_map', filepath=relative_path_str):
-                try:
-                    transcript_text = await transcript_path.read_text(encoding='utf-8')
-                    transcript_text = transcript_text.strip()
-
-                    if not transcript_text:
-                        logfire.warn(
-                            'Skipping empty transcript file: {filepath}',
-                            filepath=relative_path_str
-                        )
-                        progress.update(map_task_id, advance=1)
-                        continue # Skip empty files
-
-                    # Format the user prompt
-                    user_prompt = prompt_template.format(
-                        transcript_text=transcript_text,
-                        transcript_filename=transcript_path.name
-                    )
-
-                    result = await agent.run(user_prompt)
-                    map_output_content = result.output
-
-                    if not map_output_content or map_output_content.strip() == 'No key persons identified in this transcript.':
-                         logfire.info(
-                             'No key persons identified or empty output for: {filepath}',
-                             filepath=relative_path_str
-                         )
-                    else:
-                        await output_path.write_text(map_output_content, encoding='utf-8')
-                        logfire.info(
-                            'Successfully generated map output: {output_path}',
-                            output_path=str(output_path)
-                        )
-
-                    processed_stats['processed'] += 1
-
-                except Exception as e:
-                    processed_stats['failed'] += 1
-                    logfire.error(
-                        'Error processing transcript {filepath}: {error}',
-                        filepath=relative_path_str,
-                        error=str(e),
-                        exc_info=True
-                    )
-                finally:
-                    progress.update(map_task_id, advance=1)
-
-
-    with Progress() as progress:
-        map_task_id = progress.add_task('[cyan]Mapping transcripts...', total=len(transcript_paths))
-
-        # Ensure output directory exists (async)
-        await output_dir.mkdir(exist_ok=True, parents=True)
-        logfire.info('Ensured output directory exists: {output_dir}', output_dir=str(output_dir))
-
-        async with trio.open_nursery() as nursery:
-            for _ in range(concurrency):
-                nursery.start_soon(map_worker, receive_channel.clone())
-
-            # Send transcript paths to workers
-            async with send_channel:
-                for path in transcript_paths:
-                    await send_channel.send(path)
-
-    return processed_stats['processed'], processed_stats['failed']
-
-
-async def run_reduce_phase(
-    map_output_dir: Path,
-    reduced_output_file: Path
-) -> None:
-    """
-    Combines all .map.md files from the map phase into a single Markdown file.
-
-    Args:
-        map_output_dir: Directory containing the .map.md output files.
-        reduced_output_file: Path to the final combined Markdown file.
-    """
-    logfire.info('--- Starting Reduce Phase ---')
-    logfire.info(f'Reading map outputs from: {map_output_dir}')
-    logfire.info(f'Writing reduced output to: {reduced_output_file}')
-
-    markdown_files = [p for p in await map_output_dir.glob('*.map.md')]
-
-    if not markdown_files:
-        logfire.warn(f'No .map.md files found in {map_output_dir}. Skipping reduce phase.')
-        logfire.info('--- Reduce Phase Complete (Skipped) ---')
-        return
-
-    # Chronological sorting of map outputs
-    parsed_files_with_dt: list[tuple[datetime, Path]] = []
-    unparseable_files_by_name: list[Path] = []
-
-    for md_file_path_item in markdown_files:
-        filename = md_file_path_item.name
-        timestamp_str = filename[:16] # Expected: "YYYY-MM-DD HH_MM"
-        try:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d %H_%M')
-            parsed_files_with_dt.append((dt_obj, md_file_path_item))
-        except ValueError:
-            logfire.warn(
-                f'Could not parse timestamp from filename: {filename}. '
-                f'It will be sorted by name after chronologically sorted items.'
-            )
-            unparseable_files_by_name.append(md_file_path_item)
-
-    parsed_files_with_dt.sort(key=lambda item: item[0]) # Sort by datetime
-    unparseable_files_by_name.sort() # Sort by Path (name)
-
-    final_sorted_file_list = [item[1] for item in parsed_files_with_dt] + unparseable_files_by_name
-    
-    all_content: list[str] = []
-    for md_file_path in final_sorted_file_list:
-        try:
-            file_name_prefix = md_file_path.name.removesuffix('.map.md')
-            content: str = await md_file_path.read_text(encoding='utf-8')
-            # Prepend filename and a separator to the content
-            all_content.append(f'## Source: {file_name_prefix}\n\n{content}')
-            logfire.info(f'Successfully read and processed {md_file_path} with prefix')
-        except Exception as e:
-            logfire.error(f'Error reading file {md_file_path}: {e}', exc_info=True)
-    
-    # Ensure output directory for the reduced file exists
-    await reduced_output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Concatenate content with a separator (e.g., double newline)
-    final_markdown = '\n\n---\n\n'.join(all_content) # Using --- as a more distinct separator
-
-    try:
-        await reduced_output_file.write_text(final_markdown, encoding='utf-8')
-        logfire.info(f'Successfully wrote combined output to {reduced_output_file}')
-    except Exception as e:
-        logfire.error(f'Error writing combined output to {reduced_output_file}: {e}', exc_info=True)
-        sys.exit(1)
-
-    logfire.info(f'Combined {len(all_content)} map files into {reduced_output_file}')
-    logfire.info('--- Reduce Phase Complete ---')
+from synapse.exceptions import (
+    EmptyInputDirectory,
+    FileProcessingError,
+    ReducePhaseError,
+    SynapseError,
+)
+from synapse.processors.map import run_map_phase
+from synapse.processors.reduce import run_reduce_phase
+from synapse.utils.file_io import load_prompt_config
+from synapse.utils.logging import configure_logging
 
 
 async def main():
-    """Main execution function for the Map Phase."""
-    global config
+    """
+    Main async execution function for the Synapse processing pipeline.
     
-    # Load configuration asynchronously
+    This coordinates both map and reduce phases of the transcript analysis:
+    1. Map phase: Process individual transcripts to identify key people
+    2. Reduce phase: Synthesize information across all transcripts
+    """
+    # Configure logging
+    configure_logging()
+    
+    # Load configuration
     config = SynapseSettings()
     
     logfire.info('--- Starting Project Synapse: Map Phase ---')
 
     # --- Configuration Setup ---
-    # Use the configuration loaded from config.py
     input_dir = Path(config.map_phase.input_transcripts_dir)
     output_dir = Path(config.map_phase.output_map_dir)
-    
-    # Make sure prompt_config_path is always a Path, not None
     prompt_config_path = Path(config.map_phase.prompt_config_path)
-    
     concurrency = config.processing.concurrency
-    model_name = config.processing.llm_model
     
     logfire.info('Input directory: {input_dir}', input_dir=str(input_dir))
     logfire.info('Output directory: {output_dir}', output_dir=str(output_dir))
     logfire.info('Prompt config path: {prompt_config_path}', prompt_config_path=str(prompt_config_path))
     logfire.info('Concurrency limit: {concurrency}', concurrency=concurrency)
-    logfire.info('Using LLM model: {model}', model=model_name)
+    logfire.info('Using LLM model: {model}', model=config.map_phase.llm_model)
     # --- End Configuration Setup ---
 
     # Load prompt configuration
     prompt_config_model = await load_prompt_config(prompt_config_path)
-    system_prompt = prompt_config_model.map_prompt.system_message
-    user_template = prompt_config_model.map_prompt.user_message_template
 
-    # Initialize the Agent
-    agent = Agent(
-        model=model_name,
-        instructions=system_prompt,
-    )
-
-    # Find transcript files asynchronously
+    # Find transcript files
     try:
+        # Create output directory if it doesn't exist
+        await output_dir.mkdir(exist_ok=True, parents=True)
+        logfire.info('Ensured output directory exists: {dir_path}', dir_path=str(output_dir))
+        
+        # Find transcript files directly
         transcript_files = [p for p in await input_dir.glob('*.txt')]
-        if not transcript_files:
-            logfire.warning(
-                'No .txt files found in the input directory: {input_dir}',
-                input_dir=str(input_dir)
-            )
-            sys.exit(0)
         logfire.info('Found {count} transcript files to process.', count=len(transcript_files))
+        
+        if not transcript_files:
+            raise EmptyInputDirectory(f'No .txt files in {input_dir}')
     except Exception as e:
-        logfire.error('Error scanning input directory {input_dir}: {error}', input_dir=str(input_dir), error=str(e), exc_info=True)
-        sys.exit(1)
+        raise FileProcessingError(f'Error scanning input directory {input_dir}: {e}')
 
     # Run the map phase processing
     with logfire.span('run_map_phase'):
         processed_count, failed_count = await run_map_phase(
             transcript_paths=transcript_files,
             output_dir=output_dir,
-            agent=agent,
-            prompt_template=user_template,
+            model_name=config.map_phase.llm_model,
+            system_prompt=prompt_config_model.map_prompt.system_message,
+            user_template=prompt_config_model.map_prompt.user_message_template,
             concurrency=concurrency
         )
 
@@ -292,13 +87,29 @@ async def main():
     logfire.info('--------------------------')
 
     # --- Reduce Phase ---
-    reduced_output_path = Path(config.reduce_phase.output_markdown_file)
-    await run_reduce_phase(map_output_dir=output_dir, reduced_output_file=reduced_output_path)
+    try:
+        success, processed_files = await run_reduce_phase(
+            map_output_dir=output_dir, 
+            output_file=Path(config.reduce_phase.output_markdown_file),
+            model_name=config.reduce_phase.llm_model,
+            system_prompt=prompt_config_model.reduce_prompt.system_message,
+            user_template=prompt_config_model.reduce_prompt.user_message_template
+        )
+        logfire.info('Reduce phase success: {success}, processed files: {count}', 
+                    success=success, count=processed_files)
+    except Exception as e:
+        raise ReducePhaseError(f'Error during Reduce Phase: {e}')
     # --- End Reduce Phase ---
+
 
 def run_main():
     """Entry point for the CLI script."""
-    trio.run(main)
+    try:
+        trio.run(main)
+    except SynapseError as err:
+        logfire.error('Fatal error: {msg}', msg=str(err), exc_info=True)
+        raise SystemExit(1) from err
+
 
 if __name__ == '__main__':
-    trio.run(main)
+    run_main()

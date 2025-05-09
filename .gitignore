@@ -17,3 +17,5 @@ map_outputs*/
 
 # env
 .env
+
+**/.claude/settings.local.json
