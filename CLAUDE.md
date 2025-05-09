@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Synapse is a text-based meeting analysis tool that uses a MapReduce approach to process meeting transcripts and extract synthesized information about key individuals. It uses LLMs (specifically Google's Gemini) to identify and consolidate information about people across multiple meetings.
+Synapse is a text-based meeting analysis tool that uses a MapReduce-inspired approach to process meeting transcripts and extract synthesized information about key individuals. It uses LLMs (specifically Google's Gemini) to identify and consolidate information about people across multiple meetings.
 
 The system follows a two-phase process:
-1. **Map Phase**: Processes each transcript individually, generating structured Markdown summaries for each key person
+1. **Map Phase**: Processes each transcript individually in parallel, generating structured Markdown summaries for each key person
 2. **Reduce Phase**: Combines and synthesizes information across all transcripts to produce comprehensive profiles
+
+Note: The current implementation uses a simplified reduce approach that takes advantage of Gemini's large 1M context window to process all map outputs in a single operation. The architecture is designed to be extended to a true distributed MapReduce implementation if needed for larger datasets that exceed context limits.
 
 ## Commands
 
@@ -67,6 +69,8 @@ pyright
    - Outputs individual Markdown files for each transcript in the map output directory
 3. Reduce Phase: All map outputs are concatenated and fed to a more powerful LLM
    - Outputs a single Markdown file with synthesized profiles in the specified output location
+   - Current implementation processes all outputs in a single LLM call since Gemini's 1M context window is sufficient for moderate data sizes
+   - The design can be extended to a true MapReduce implementation for larger datasets
 
 ### Key Dependencies
 

@@ -1,5 +1,19 @@
 """
 Reduce phase processor for synthesizing information across transcripts.
+
+Note on MapReduce Design:
+    The current implementation uses a simplified reduce approach where all map outputs
+    are concatenated and processed in a single LLM call. This works efficiently with 
+    Gemini's 1M context window for moderate-sized datasets.
+    
+    For larger datasets where outputs exceed model context limits, a true MapReduce
+    implementation would be needed with:
+    1. Partitioning by person/entity keys
+    2. Parallel reducers for different partitions
+    3. Hierarchical reduction for very large datasets
+    
+    The current architecture is designed to be extended to this approach in the future
+    if/when output sizes exceed single-context processing capabilities.
 """
 from datetime import datetime
 
