@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Synapse is a text-based meeting analysis tool that uses a MapReduce-inspired approach to process meeting transcripts and extract synthesized information about key individuals. It uses LLMs (specifically Google's Gemini) to identify and consolidate information about people across multiple meetings.
+Synapse is a text-based meeting analysis tool that uses a MapReduce-inspired approach to process meeting transcripts and extract synthesized information about key individuals. It uses LLMs (specifically Google's Gemini) to identify and consolidate information about people across multiple meetings. This is a personal script utility program.
 
 The system follows a two-phase process:
 1. **Map Phase**: Processes each transcript individually in parallel, generating structured Markdown summaries for each key person
@@ -45,6 +45,22 @@ ruff check main.py
 pyright
 ```
 
+### Testing
+
+```bash
+# Install test dependencies
+uv sync
+
+# Run all tests
+uv run -m pytest
+
+# Run tests with verbose output
+uv run -m pytest -v
+
+# Run tests with stop on first failure
+uv run -m pytest -xvs
+```
+
 ## Code Architecture
 
 ### Core Components
@@ -79,6 +95,39 @@ pyright
 - **logfire**: For structured logging
 - **pydantic/pydantic-settings**: For configuration management
 - **rich**: For console output and progress bars
+
+#### Trio Path Usage
+
+When using trio.Path methods for file operations:
+
+```python
+# Correct usage of trio.Path.glob - await it first, then iterate over the result
+files = [path for path in await directory_path.glob('*.txt')]
+# NOT: async for path in directory_path.glob('*.txt')  # WRONG!
+
+# Correct usage of trio.Path.read_text - async function
+content = await file_path.read_text()
+
+# Correct usage of trio.Path.exists - async function
+if await file_path.exists():
+    # do something
+```
+
+#### TestModel Usage
+
+When mocking LLM agents for testing:
+
+```python
+# Import the TestModel
+from pydantic_ai.models.test import TestModel
+from pydantic_ai import Agent
+
+# Override the agent for testing with a fixed output text
+with Agent.override("google-gla:gemini-2.5-flash-preview-04-17",
+                   TestModel(custom_output_text="Test output")):
+    # Your test code that uses the agent
+    result = await agent.run("prompt")
+```
 
 ### Configuration
 

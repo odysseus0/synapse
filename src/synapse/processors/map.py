@@ -3,38 +3,30 @@ Map phase processor for analyzing individual transcripts.
 """
 import logfire
 import trio
-from pydantic_ai import Agent
 from rich.progress import Progress
 from trio import Path
 
+from synapse.agents import MAP_USER_MESSAGE_TEMPLATE, map_agent
+from synapse.config import settings
 
-async def run_map_phase(
-    transcript_paths: list[Path],
-    output_dir: Path,
-    model_name: str,
-    system_prompt: str,
-    user_template: str,
-    concurrency: int
-) -> tuple[int, int]:
+
+async def run_map_phase() -> tuple[int, int]:
     """
     Processes transcript files concurrently to generate Map phase Markdown outputs.
 
-    Args:
-        transcript_paths: List of paths to input transcript files.
-        output_dir: Path to the directory where map outputs will be saved.
-        model_name: Name of the LLM model to use.
-        system_prompt: System prompt for the map agent.
-        user_template: User prompt template with placeholders.
-        concurrency: Maximum number of concurrent processing tasks.
+    Uses configuration from module-level settings.
 
     Returns:
         A tuple containing (number_of_files_processed, number_of_files_failed).
     """
-    # Initialize the Agent
-    agent = Agent(
-        model=model_name,
-        instructions=system_prompt,
-    )
+    # Use module-level settings
+    concurrency = settings.processing.concurrency
+    output_dir = Path(settings.map_phase.output_map_dir)
+    input_dir = Path(settings.map_phase.input_transcripts_dir)
+
+    # Get transcript files from the configured input directory
+    transcript_paths = [p for p in await input_dir.glob('*.txt')]
+    logfire.info(f'Found {len(transcript_paths)} transcript files in {input_dir}')
     processed_stats = {'processed': 0, 'failed': 0}
     send_channel, receive_channel = trio.open_memory_channel[Path](0)
 
@@ -56,12 +48,12 @@ async def run_map_phase(
                         progress.update(map_task_id, advance=1)
                         continue  # Skip empty files
 
-                    # Process with agent
-                    user_prompt = user_template.format(
+                    # Process with module-level agent
+                    user_prompt = MAP_USER_MESSAGE_TEMPLATE.format(
                         transcript_text=transcript_text,
                         transcript_filename=transcript_path.name
                     )
-                    result = await agent.run(user_prompt)
+                    result = await map_agent.run(user_prompt)
                     map_output_content = result.output
 
                     # Save output if useful
