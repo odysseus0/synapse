@@ -10,7 +10,7 @@ from pydantic_ai import Agent
 from synapse.config import settings
 
 MAP_SYSTEM_PROMPT = dedent("""
-    You are an expert meeting analyst AI. Your primary task is to meticulously analyze the provided meeting transcript and, for each key individual identified by name, generate a structured Markdown summary block.
+    You are an expert meeting analyst AI. Your primary task is to meticulously analyze the provided meeting transcript and, for each key individual identified by name, generate structured summary.
 
     Key individuals are typically internal team members, core collaborators, or significant external stakeholders who demonstrably:
     * Actively contributed to discussions (e.g., speaking multiple times, offering substantive points).
@@ -25,18 +25,12 @@ MAP_SYSTEM_PROMPT = dedent("""
         b. CONFIDENT INFERENCE: If a name can be confidently inferred for a generic speaker label, generate a summary block for them using the INFERRED name.
         c. NO CONFIDENT INFERENCE: If a name CANNOT be confidently inferred for a generic speaker label after careful review, DO NOT generate a block for that speaker. They should be discarded for this analysis.
     3. FOCUS & EXCLUSION: Concentrate on individuals with substantive contributions. Ignore fleeting mentions, individuals who only speak to agree without adding substance, or those who do not meet the "key individual" criteria above.
-
-    OUTPUT REQUIREMENTS:
-    * For each identified key individual, generate a Markdown block as specified in the user prompt.
-    * Adhere strictly to the provided Markdown structure.
-    * If no key individuals are identified (or all potential candidates were discarded due_to_uninferrable_names), your entire output should be ONLY the specific text defined in the user prompt for this scenario.
 """)
 
 MAP_USER_MESSAGE_TEMPLATE = dedent("""
-
     Analyze the following meeting transcript.
 
-    For EACH key person you identify (following all criteria and name inference rules in the system message), generate a separate Markdown block using the exact format specified below.
+    For EACH key person you identify (following all criteria and name inference rules in the system message), generate a separate section using the exact format specified below.
     If, after your analysis, no key persons can be identified according to the instructions, your entire output for this transcript must be *only* the following text and nothing else:
     "No key persons identified in this transcript."
 
@@ -45,9 +39,9 @@ MAP_USER_MESSAGE_TEMPLATE = dedent("""
     {transcript_text}
     </transcript>
 
-    Instructions & Output Format (Repeat this complete Markdown block structure for EACH identified person). The exact Markdown structure for each profile is defined *within* the `<md>` and `</md>` tags shown below.
+    Instructions & Output Format (Repeat this complete structure for EACH identified person):
 
-    <md>
+    <structure>
     ## Person Identified: [Name Variation Used Most Prominently Here OR Confidently Inferred Name]
 
     * **Transcript Source:** `{transcript_filename}`
@@ -68,9 +62,9 @@ MAP_USER_MESSAGE_TEMPLATE = dedent("""
     * **Interactions with Others:**
         * `Interacted with: [Other Person Name Variation] regarding "[Interaction Topic]". Type: [e.g., Direct Discussion, Debate, Presentation to, Questioned by, Received input from, Collaborated on task with]. (Context: [Optional brief, relevant snippet, 1-2 sentences])`
         * `(List all significant interactions HERE, or state None Identified)`
-    </md>
+    </structure>
 
-    Ensure all fields accurately reflect information *only* from the provided transcript. Do not add any explanatory text outside the specified Markdown structure. Use Markdown best practices for lists and emphasis. Use `YYYY-MM-DD` for dates.
+    Ensure all fields accurately reflect information *only* from the provided transcript. Do not add any explanatory text. Do not include triple backticks code blocks in your output. Use Markdown best practices for lists and emphasis. Use `YYYY-MM-DD` for dates.
 """)
 
 REDUCE_SYSTEM_PROMPT = dedent("""
