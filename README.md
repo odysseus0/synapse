@@ -74,7 +74,7 @@ The system uses a two-phase MapReduce approach:
 
 3. Results will be generated in:
    - Map phase results: Your configured map outputs directory (default: `./map_outputs/`)
-   - Final synthesized profiles: Your configured output file location (default: `./processed_output/final_profiles.md`)
+   - Final synthesized profiles: Your configured profiles directory (default: `./profiles/`)
 
 ## Configuration
 
@@ -83,7 +83,7 @@ All directories, model choices, and processing parameters are configurable throu
 ### Input/Output Locations
 - `SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR`: Directory containing transcript files (default: `./transcripts_sample`)
 - `SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR`: Directory for map phase outputs (default: `./map_outputs`)
-- `SYNAPSE_REDUCE_PHASE__OUTPUT_MARKDOWN_FILE`: Path for final output file (default: `./processed_output/final_profiles.md`)
+- `SYNAPSE_REDUCE_PHASE__OUTPUT_PROFILES_DIR`: Directory for reduce phase profile outputs (default: `./profiles`)
 
 ### Model Selection
 - `SYNAPSE_MAP_PHASE__LLM_MODEL`: LLM model for map phase (default: `google-gla:gemini-2.5-flash-preview-04-17`)
