@@ -8,7 +8,7 @@ Configuration can be set via environment variables with the SYNAPSE_ prefix:
 - SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR: Directory for transcript files
 - SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR: Directory for map phase outputs
 - SYNAPSE_MAP_PHASE__LLM_MODEL: LLM model for map phase
-- SYNAPSE_REDUCE_PHASE__OUTPUT_MARKDOWN_FILE: Path for final output file
+- SYNAPSE_REDUCE_PHASE__OUTPUT_PROFILES_DIR: Directory for profile output files
 - SYNAPSE_PROCESSING__CONCURRENCY: Maximum concurrent processes
 
 Environment variables use double underscores (__) for nested config sections.
@@ -49,8 +49,8 @@ class ReducePhaseConfig(BaseModel):
     profiles, including output location and LLM model specification.
     """
 
-    output_markdown_file: str = Field(
-        default='./processed_output/final_profiles.md', description='Path to save the final combined Markdown output'
+    output_profiles_dir: str = Field(
+        default='./profiles', description='Directory to save individual profile Markdown files'
     )
     llm_model: str = Field(
         default='google-gla:gemini-2.5-pro-preview-05-06', description='LLM model to use for processing'
@@ -93,4 +93,6 @@ class SynapseSettings(BaseSettings):
         env_prefix='SYNAPSE_',
     )
 
+
 settings = SynapseSettings()
+

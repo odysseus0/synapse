@@ -13,6 +13,7 @@ dependencies = [
   "trio>=0.30.0",
   "pyyaml>=6.0.2",
   "pydantic-settings>=2.9.1",
+  "typer>=0.15.4",
 ]
 
 [dependency-groups]

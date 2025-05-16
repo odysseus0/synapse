@@ -15,13 +15,31 @@ Note on MapReduce Design:
     The current architecture is designed to be extended to this approach in the future
     if/when output sizes exceed single-context processing capabilities.
 """
+import re
 from datetime import datetime
 
 import logfire
+import yaml
 from trio import Path
 
 from synapse.agents import REDUCE_USER_MESSAGE_TEMPLATE, reduce_agent
 from synapse.config import settings
+
+
+def sanitize_filename(name: str) -> str:
+    """
+    Convert a person's name to a valid filename.
+    
+    Args:
+        name: The person's name
+        
+    Returns:
+        A sanitized version of the name suitable for use as a filename
+    """
+    # Replace spaces with underscores and remove any characters not allowed in filenames
+    sanitized = re.sub(r'[^\w\-\.]', '_', name).strip('_')
+    # Convert to lowercase for better cross-platform compatibility
+    return sanitized.lower()
 
 
 async def sort_map_files(markdown_files_list: list[Path]) -> list[Path]:
@@ -59,7 +77,7 @@ async def sort_map_files(markdown_files_list: list[Path]) -> list[Path]:
 async def run_reduce_phase() -> tuple[bool, int]:
     """
     Reads map phase outputs, concatenates them, runs them through a reduce agent,
-    and saves the final synthesized Markdown output.
+    and saves individual profile files with YAML frontmatter for each person.
 
     Uses configuration from module-level settings.
 
@@ -68,11 +86,11 @@ async def run_reduce_phase() -> tuple[bool, int]:
     """
     # Use module-level settings
     map_output_dir = Path(settings.map_phase.output_map_dir)
-    output_file = Path(settings.reduce_phase.output_markdown_file)
+    output_profiles_dir = Path(settings.reduce_phase.output_profiles_dir)
 
     logfire.info('--- Starting Reduce Phase ---')
     logfire.info(f'Reading map outputs from: {map_output_dir}')
-    logfire.info(f'Target for reduced output: {output_file}')
+    logfire.info(f'Target directory for profile outputs: {output_profiles_dir}')
 
     # Find and sort all map output files
     markdown_files: list[Path] = [path for path in await map_output_dir.glob('*.map.md')]
@@ -100,7 +118,7 @@ async def run_reduce_phase() -> tuple[bool, int]:
     # Process content with the reduce agent
     with logfire.span('reduce_agent_processing', files_count=len(raw_map_outputs)):
         # Concatenate content with double newlines between file contents for separation
-        concatenated_map_data = '\\n\\n'.join(raw_map_outputs)
+        concatenated_map_data = '\n\n'.join(raw_map_outputs)
         logfire.info(f'Processing {len(raw_map_outputs)} map outputs. Total size: {len(concatenated_map_data)} chars.')
 
         # Format and run the prompt
@@ -110,19 +128,36 @@ async def run_reduce_phase() -> tuple[bool, int]:
         )
 
         try:
+            # Use structured output with List[Profile] type from the agent definition
             result = await reduce_agent.run(reduce_user_prompt)
-            final_reduced_output = result.output if result and result.output else ''
-
-            if not final_reduced_output.strip():
-                logfire.info('Reduce agent returned empty output.')
-                return False, len(raw_map_outputs)
-
-            # Ensure output directory and write the file
-            await output_file.parent.mkdir(exist_ok=True, parents=True)
-            logfire.info('Ensured output directory exists: {dir_path}', dir_path=str(output_file.parent))
-            await output_file.write_text(final_reduced_output, encoding='utf-8')
             
-            logfire.info(f'Reduce phase processed. Output at: {output_file}')
+            if not result or not result.output or len(result.output) == 0:
+                logfire.info('Reduce agent returned empty output or no profiles.')
+                return False, len(raw_map_outputs)
+            
+            # Ensure output directory exists
+            await output_profiles_dir.mkdir(exist_ok=True, parents=True)
+            logfire.info(f'Ensured output directory exists: {output_profiles_dir}')
+            
+            # Process each profile and write to individual files
+            profiles_written = 0
+            for profile in result.output:
+                # Generate filename based on sanitized person name
+                filename = f'{sanitize_filename(profile.metadata.name)}.md'
+                profile_path = output_profiles_dir / filename
+                
+                # Create YAML frontmatter from metadata
+                frontmatter = yaml.dump(profile.metadata.model_dump(), sort_keys=False)
+                
+                # Combine frontmatter with content
+                file_content = f'---\n{frontmatter}---\n\n{profile.content}'
+                
+                # Write the file
+                await profile_path.write_text(file_content, encoding='utf-8')
+                logfire.info(f'Wrote profile for {profile.metadata.name} to {profile_path}')
+                profiles_written += 1
+            
+            logfire.info(f'Reduce phase processed. Wrote {profiles_written} profile files to {output_profiles_dir}')
             logfire.info('--- Reduce Phase Complete ---')
             
             return True, len(sorted_files)

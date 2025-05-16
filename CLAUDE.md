@@ -23,26 +23,38 @@ uv sync
 # Set up environment variables
 cp .env_template .env
 # Edit .env with your API keys and configuration
+
+# Add new package 
+uv add pyyaml
 ```
 
 ### Running the tool
 
 ```bash
 # Run the tool (both map and reduce phases)
-uv run synapse.main
+uv run -m synapse.main
 
-# Or using the package script
-uv run -m synapse
+# Run only the map phase
+uv run -m synapse.main --phase map
+
+# Run only the reduce phase
+uv run -m synapse.main --phase reduce
+
+# See all available options
+uv run -m synapse.main --help
 ```
 
 ### Linting and Type Checking
 
 ```bash
 # Run ruff linter
-ruff check main.py
+uv run ruff check src/
+
+# Auto-fix ruff linting issues
+uv run ruff check --fix src/
 
 # Run type checking with pyright
-pyright
+uv run pyright --ignoreexternal --verifytypes
 ```
 
 ### Testing
@@ -95,6 +107,7 @@ uv run -m pytest -xvs
 - **logfire**: For structured logging
 - **pydantic/pydantic-settings**: For configuration management
 - **rich**: For console output and progress bars
+- **typer**: For command-line interface
 
 #### Trio Path Usage
 
@@ -135,5 +148,6 @@ The system is highly configurable through environment variables with the `SYNAPS
 - `SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR`: Directory for input transcripts
 - `SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR`: Directory for map phase outputs
 - `SYNAPSE_MAP_PHASE__LLM_MODEL`: LLM model to use for map phase
-- `SYNAPSE_REDUCE_PHASE__OUTPUT_MARKDOWN_FILE`: Path for final output file
+- `SYNAPSE_REDUCE_PHASE__OUTPUT_PROFILES_DIR`: Directory for final profile outputs
+- `SYNAPSE_REDUCE_PHASE__LLM_MODEL`: LLM model to use for reduce phase
 - `SYNAPSE_PROCESSING__CONCURRENCY`: Number of concurrent transcript processing tasks

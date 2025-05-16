@@ -36,11 +36,11 @@ The system uses a two-phase MapReduce approach:
 1. Clone the repository:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/odysseus0/synapse.git
    cd synapse
    ```
 
-2. Install dependencies:
+2. Install dependencies using UV (Python package manager):
 
    ```bash
    uv sync
@@ -53,37 +53,58 @@ The system uses a two-phase MapReduce approach:
    # Edit .env with your API keys and configuration
    ```
 
+4. Set up your Gemini API key:
+   - Obtain an API key from Google AI Studio (https://makersuite.google.com/app/apikey)
+   - Add your API key to the .env file: `GEMINI_API_KEY=your_api_key_here`
+
 ## Usage
 
-1. Place your meeting transcript text files in the `transcripts` directory (or configure a custom directory in settings)
+1. Place your meeting transcript text files in your input directory (default: `./transcripts_sample/`)
+   - Transcripts should be simple text files with speaker labels (e.g., "Speaker 1:", "John:", etc.)
 
-2. Run the map phase:
+2. Run the tool (processes both map and reduce phases):
 
    ```bash
-   uv run synapse.main
+   # Using the module directly with uv
+   uv run -m synapse
+   
+   # OR using the installed package script
+   python -m synapse
    ```
 
-3. Outputs will be generated in the `map_outputs` directory (or your configured output directory)
+3. Results will be generated in:
+   - Map phase results: Your configured map outputs directory (default: `./map_outputs/`)
+   - Final synthesized profiles: Your configured output file location (default: `./processed_output/final_profiles.md`)
 
 ## Configuration
 
-Configuration can be set via environment variables or a `.env` file:
+All directories, model choices, and processing parameters are configurable through environment variables in your `.env` file:
 
-- `SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR`: Directory containing transcript files (default: `./transcripts`)
+### Input/Output Locations
+- `SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR`: Directory containing transcript files (default: `./transcripts_sample`)
 - `SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR`: Directory for map phase outputs (default: `./map_outputs`)
-- `SYNAPSE_MAP_PHASE__PROMPT_CONFIG_PATH`: Path to prompt configuration (default: `./prompt.yaml`)
-- `SYNAPSE_PROCESSING__CONCURRENCY`: Maximum concurrent processes (default: `5`)
-- `SYNAPSE_PROCESSING__LLM_MODEL`: LLM model to use (default: `google-gla:gemini-2.5-flash-preview-04-17`)
+- `SYNAPSE_REDUCE_PHASE__OUTPUT_MARKDOWN_FILE`: Path for final output file (default: `./processed_output/final_profiles.md`)
+
+### Model Selection
+- `SYNAPSE_MAP_PHASE__LLM_MODEL`: LLM model for map phase (default: `google-gla:gemini-2.5-flash-preview-04-17`)
+- `SYNAPSE_REDUCE_PHASE__LLM_MODEL`: LLM model for reduce phase (default: `google-gla:gemini-2.5-pro-preview-05-06`)
+
+### Performance Settings
+- `SYNAPSE_PROCESSING__CONCURRENCY`: Maximum concurrent transcript processing tasks (default: `5`)
+
+The system will automatically create any output directories that don't exist.
 
 ## Project Structure
 
 - `src/synapse/`: Main Python package
-  - `main.py`: Core execution logic
-  - `config.py`: Configuration handling
-- `prompt.yaml`: Prompt templates for LLM interactions
+  - `main.py`: Core execution logic and entry point
+  - `config.py`: Configuration management using Pydantic
+  - `agents.py`: LLM agent prompts and configurations
+  - `processors/`: Map and reduce processing modules
+  - `exceptions.py`: Custom exception hierarchy
+  - `logging.py`: Structured logging configuration
+- `transcripts_sample/`: Example directory for input transcript files
 - `SPEC.md`: Detailed project specification
-- `transcripts/`: Directory for input transcript files
-- `map_outputs/`: Directory for map phase outputs
 
 ## License
 
