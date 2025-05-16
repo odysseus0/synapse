@@ -9,11 +9,13 @@ wheels/
 # Virtual environments
 .venv
 
-# transcribe
+# Input and output directories
 transcripts*/
-
-# map
 map_outputs*/
+profiles/
+
+# Keep directory structure with .gitkeep
+!*/.gitkeep
 
 # env
 .env
