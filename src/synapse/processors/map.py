@@ -1,6 +1,7 @@
 """
 Map phase processor for analyzing individual transcripts.
 """
+
 import logfire
 import trio
 from rich.progress import Progress
@@ -45,19 +46,20 @@ async def run_map_phase() -> tuple[int, int]:
 
                     if not transcript_text:
                         logfire.warn('Skipping empty transcript file: {filepath}', filepath=relative_path_str)
-                        progress.update(map_task_id, advance=1)
                         continue  # Skip empty files
 
                     # Process with module-level agent
                     user_prompt = MAP_USER_MESSAGE_TEMPLATE.format(
-                        transcript_text=transcript_text,
-                        transcript_filename=transcript_path.name
+                        transcript_text=transcript_text, transcript_filename=transcript_path.name
                     )
                     result = await map_agent.run(user_prompt)
                     map_output_content = result.output
 
                     # Save output if useful
-                    if map_output_content and map_output_content.strip() != 'No key persons identified in this transcript.':
+                    if (
+                        map_output_content
+                        and map_output_content.strip() != 'No key persons identified in this transcript.'
+                    ):
                         await output_path.write_text(map_output_content, encoding='utf-8')
                         logfire.info('Map output saved: {output_path}', output_path=str(output_path))
                     else:
@@ -71,7 +73,7 @@ async def run_map_phase() -> tuple[int, int]:
                         'Error processing transcript {filepath}: {error}',
                         filepath=relative_path_str,
                         error=str(e),
-                        exc_info=True
+                        exc_info=True,
                     )
                 finally:
                     progress.update(map_task_id, advance=1)
@@ -94,3 +96,4 @@ async def run_map_phase() -> tuple[int, int]:
                     await send_channel.send(path)
 
     return processed_stats['processed'], processed_stats['failed']
+
