@@ -36,9 +36,6 @@ class MapPhaseConfig(BaseModel):
         default='./transcripts', description='Directory containing input .txt transcripts'
     )
     output_map_dir: str = Field(default='./map_outputs', description='Directory to save the map phase .md outputs')
-    prompt_config_path: str = Field(
-        default='./prompt.yaml', description='Path to the YAML file containing prompt configuration'
-    )
 
 
 class ReducePhaseConfig(BaseModel):
@@ -95,4 +92,3 @@ class SynapseSettings(BaseSettings):
 
 
 settings = SynapseSettings()
-

@@ -47,7 +47,7 @@ isort = { combine-as-imports = true }
 mccabe = { max-complexity = 15 }
 
 [project.scripts]
-synapse = "synapse.main:run_main"
+synapse = "synapse.main:run"
 
 [build-system]
 requires = ["hatchling"]
