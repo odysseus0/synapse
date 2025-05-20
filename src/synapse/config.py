@@ -35,7 +35,7 @@ class MapPhaseConfig(BaseModel):
         default='google-gla:gemini-2.5-flash-preview-04-17', description='LLM model to use for processing'
     )
     input_transcripts_dir: str = Field(
-        default='./transcripts', description='Directory containing input .txt transcripts'
+        default='./transcripts_sample', description='Directory containing input .txt transcripts'
     )
     output_map_dir: str = Field(default='./map_outputs', description='Directory to save the map phase .md outputs')
 
@@ -52,7 +52,7 @@ class ReducePhaseConfig(BaseModel):
         default='./profiles', description='Directory to save individual profile Markdown files'
     )
     llm_model: str = Field(
-        default='google-gla:gemini-2.5-pro-preview-05-06', description='LLM model to use for processing'
+        default='google-gla:gemini-2.5-flash-preview-04-17', description='LLM model to use for processing'
     )
 
 
@@ -65,7 +65,7 @@ class ProcessingConfig(BaseModel):
     """
 
     concurrency: int = Field(
-        default=5,
+        default=10,
         description='Maximum number of concurrent processing tasks',
         ge=1,  # Ensures concurrency is at least 1
     )
