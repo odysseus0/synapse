@@ -16,7 +16,6 @@ MAP_SYSTEM_PROMPT = dedent("""
 
     Key individuals are typically internal team members, core collaborators, or significant external stakeholders who demonstrably:
     * Actively contributed to discussions (e.g., speaking multiple times, offering substantive points).
-    * Were assigned action items.
     * Were involved in making or influencing decisions.
     * Expressed notable opinions or stances relevant to the meeting's objectives.
 
@@ -52,9 +51,6 @@ MAP_USER_MESSAGE_TEMPLATE = dedent("""
     * **Summary of Contributions/Discussion:**
         * `[Bulleted list (2-5 key points) or brief paragraph summarizing their most significant statements, questions asked, proposals made, or information shared HERE. Focus on their active contributions to the meeting's objectives.]`
     * **Topics Discussed:** `[List up to 5 key topics/projects mentioned in relation to them HERE, comma-separated; choose the most impactful topics based on discussion length, emphasis, or explicit statements of importance.]`
-    * **Action Items Assigned To This Person:**
-        * `[Action Item 1 text] (Context: [Optional brief, relevant snippet, 1-2 sentences])`
-        * `(List all items assigned TO THEM HERE, or state None Identified)`
     * **Decisions Involved In:**
         * `[Decision 1 summary] (Role Hint: [e.g., Proposed, Supported, Opposed, Agreed to, Questioned, Informed decision-makers, Implemented], Context: [Optional brief, relevant snippet, 1-2 sentences])`
         * `(List all decisions they were directly involved in HERE, or state None Identified)`
@@ -82,7 +78,7 @@ REDUCE_SYSTEM_PROMPT = dedent("""
 
     Each profile should consist of:
     - Structured metadata about the person
-    - Markdown content with comprehensive information including their activity, topics, action items, decisions, stances, and interactions
+    - Markdown content with comprehensive information including their activity, topics, decisions, stances, and interactions
 """)
 
 REDUCE_USER_MESSAGE_TEMPLATE = dedent("""
@@ -108,11 +104,6 @@ REDUCE_USER_MESSAGE_TEMPLATE = dedent("""
 
     * `[Synthesize and list the main topics/projects they consistently engage with, drawing from "Topics Discussed" in map outputs. Prioritize topics with repeated engagement or significant contributions.]`
     * `... (add more topics as needed)`
-
-    ### Consolidated Action Items:
-
-    * `[Action Item text] (Assigned: [Date Hint from map output -<y_bin_46>-MM-DD], Source: [Source Transcript from map output], Status Hint: [Infer status, e.g., Assigned, In Progress (if later mentioned as ongoing), Completed (if later mentioned as done/closed), Overdue (if date has passed with no completion update), Blocked. Default to 'Assigned' if no other information. Note if status changes across transcripts, e.g., 'Initially Assigned (SourceA, DateA), later marked Completed in (SourceB, DateB)'.])`
-    * `(List all unique consolidated action items assigned to this person. State if 'None outstanding' or 'All appear completed' based on available information.)`
 
     ### Consolidated Decisions Involved:
 
