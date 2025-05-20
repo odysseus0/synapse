@@ -2,9 +2,10 @@
 Configuration module for Synapse.
 
 This module defines configuration structures using Pydantic models and settings,
-allowing for typed configuration with environment variable support.
+allowing for typed configuration with environment variable and .env file support.
 
-Configuration can be set via environment variables with the SYNAPSE_ prefix:
+Configuration can be set via environment variables with the SYNAPSE_ prefix
+or in a .env file:
 - SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR: Directory for transcript files
 - SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR: Directory for map phase outputs
 - SYNAPSE_MAP_PHASE__LLM_MODEL: LLM model for map phase
@@ -12,6 +13,7 @@ Configuration can be set via environment variables with the SYNAPSE_ prefix:
 - SYNAPSE_PROCESSING__CONCURRENCY: Maximum concurrent processes
 
 Environment variables use double underscores (__) for nested config sections.
+Environment variables take precedence over values defined in the .env file.
 """
 
 from pydantic import BaseModel, Field
@@ -83,6 +85,7 @@ class SynapseSettings(BaseSettings):
 
     # Configure pydantic-settings behavior using model_config
     model_config = SettingsConfigDict(
+        env_file='.env',
         env_file_encoding='utf-8',
         env_nested_delimiter='__',
         case_sensitive=False,

@@ -54,7 +54,7 @@ uv run ruff check src/
 uv run ruff check --fix src/
 
 # Run type checking with pyright
-uv run pyright --ignoreexternal --verifytypes
+uv run pyright
 ```
 
 ### Testing
