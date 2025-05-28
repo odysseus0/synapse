@@ -2,20 +2,26 @@
 Map phase processor for analyzing individual transcripts.
 """
 
+from collections.abc import Awaitable, Callable
+
 import logfire
 import trio
 from rich.progress import Progress
 from trio import Path
 
-from synapse.agents import MAP_USER_MESSAGE_TEMPLATE, map_agent
 from synapse.config import settings
 
 
-async def run_map_phase() -> tuple[int, int]:
+async def run_map_phase(
+    extract_fn: Callable[[str, str], Awaitable[str]]
+) -> tuple[int, int]:
     """
     Processes transcript files concurrently to generate Map phase Markdown outputs.
 
     Uses configuration from module-level settings.
+
+    Args:
+        extract_fn: Async function that takes (content, filename) and returns extracted text.
 
     Returns:
         A tuple containing (number_of_files_processed, number_of_files_failed).
@@ -48,12 +54,8 @@ async def run_map_phase() -> tuple[int, int]:
                         logfire.warn('Skipping empty transcript file: {filepath}', filepath=relative_path_str)
                         continue  # Skip empty files
 
-                    # Process with module-level agent
-                    user_prompt = MAP_USER_MESSAGE_TEMPLATE.format(
-                        transcript_text=transcript_text, transcript_filename=transcript_path.name
-                    )
-                    result = await map_agent.run(user_prompt)
-                    map_output_content = result.output
+                    # Process with provided extract_fn
+                    map_output_content = await extract_fn(transcript_text, transcript_path.name)
 
                     # Save output if useful
                     if (

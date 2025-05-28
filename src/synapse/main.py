@@ -20,6 +20,7 @@ from synapse.exceptions import (
     SynapseError,
 )
 from synapse.logging import configure_logging
+from synapse.processors.extractors import extract_person_profiles
 from synapse.processors.map import run_map_phase
 from synapse.processors.reduce import run_reduce_phase
 
@@ -59,7 +60,7 @@ async def run_map(check_inputs: bool = True) -> tuple[int, int]:
 
     logfire.info('--- Starting Project Synapse: Map Phase ---')
     with logfire.span('run_map_phase'):
-        processed_count, failed_count = await run_map_phase()
+        processed_count, failed_count = await run_map_phase(extract_person_profiles)
 
     logfire.info('--- Map Phase Complete ---')
     logfire.info('Successfully processed: {count}', count=processed_count)
