@@ -30,6 +30,9 @@ line-length = 120
 target-version = "py313"
 include = ["src/synapse/**/*.py"]
 
+[tool.ruff.format]
+quote-style = "single"
+
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"

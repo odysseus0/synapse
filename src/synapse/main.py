@@ -4,6 +4,7 @@ Synapse: Main execution module.
 This module is the entry point for the Synapse application, orchestrating
 the map and reduce phases for analyzing meeting transcripts.
 """
+
 import enum
 
 import logfire
@@ -47,7 +48,7 @@ async def setup_directories() -> tuple[Path, Path, Path]:
             raise EmptyInputDirectory(f'No .txt files in {input_dir}')
     except Exception as e:
         raise FileProcessingError(f'Error setting up directories: {e}')
-    
+
     return input_dir, map_output_dir, profiles_dir
 
 
@@ -55,15 +56,15 @@ async def run_map(check_inputs: bool = True) -> tuple[int, int]:
     """Run only the map phase."""
     if check_inputs:
         await setup_directories()
-    
+
     logfire.info('--- Starting Project Synapse: Map Phase ---')
     with logfire.span('run_map_phase'):
         processed_count, failed_count = await run_map_phase()
-    
+
     logfire.info('--- Map Phase Complete ---')
     logfire.info('Successfully processed: {count}', count=processed_count)
     logfire.info('Failed to process: {count}', count=failed_count)
-    
+
     return processed_count, failed_count
 
 
@@ -71,12 +72,13 @@ async def run_reduce(check_inputs: bool = True) -> tuple[bool, int]:
     """Run only the reduce phase."""
     if check_inputs:
         await setup_directories()
-    
+
     logfire.info('--- Starting Project Synapse: Reduce Phase ---')
     try:
         success, processed_files = await run_reduce_phase()
-        logfire.info('Reduce phase success: {success}, processed files: {count}',
-                    success=success, count=processed_files)
+        logfire.info(
+            'Reduce phase success: {success}, processed files: {count}', success=success, count=processed_files
+        )
         return success, processed_files
     except Exception as e:
         raise ReducePhaseError(f'Error during Reduce Phase: {e}')
@@ -92,10 +94,10 @@ async def main(phase: Phase = Phase.BOTH):
     """
     # Configure logging
     configure_logging()
-    
+
     # --- Configuration Setup ---
     input_dir, map_output_dir, profiles_dir = await setup_directories()
-    
+
     logfire.info('Input directory: {input_dir}', input_dir=str(input_dir))
     logfire.info('Map output directory: {output_dir}', output_dir=str(map_output_dir))
     logfire.info('Profiles output directory: {profiles_dir}', profiles_dir=str(profiles_dir))
@@ -109,7 +111,7 @@ async def main(phase: Phase = Phase.BOTH):
         await run_map(check_inputs=False)
         logfire.info('Map outputs saved to: {output_dir}', output_dir=str(map_output_dir))
         logfire.info('--------------------------')
-    
+
     if phase in (Phase.REDUCE, Phase.BOTH):
         await run_reduce(check_inputs=False)
 

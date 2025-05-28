@@ -15,6 +15,7 @@ Note on MapReduce Design:
     The current architecture is designed to be extended to this approach in the future
     if/when output sizes exceed single-context processing capabilities.
 """
+
 import re
 from datetime import datetime
 
@@ -29,10 +30,10 @@ from synapse.config import settings
 def sanitize_filename(name: str) -> str:
     """
     Convert a person's name to a valid filename.
-    
+
     Args:
         name: The person's name
-        
+
     Returns:
         A sanitized version of the name suitable for use as a filename
     """
@@ -94,7 +95,7 @@ async def run_reduce_phase() -> tuple[bool, int]:
 
     # Find and sort all map output files
     markdown_files: list[Path] = [path for path in await map_output_dir.glob('*.map.md')]
-    
+
     if not markdown_files:
         logfire.warn(f'No .map.md files found in {map_output_dir}. Skipping reduce agent processing.')
         logfire.info('--- Reduce Phase Complete (Skipped due to no input map files) ---')
@@ -102,14 +103,14 @@ async def run_reduce_phase() -> tuple[bool, int]:
 
     # Sort files chronologically when possible
     sorted_files: list[Path] = await sort_map_files(markdown_files)
-    
+
     # Read and concatenate non-empty file contents
     raw_map_outputs: list[str] = []
     for file_path in sorted_files:
         content = await file_path.read_text(encoding='utf-8')
         if content.strip():  # Skip empty content
             raw_map_outputs.append(content)
-    
+
     if not raw_map_outputs:
         logfire.warn(f'No non-empty content read from .map.md files in {map_output_dir}. Skipping reduce agent.')
         logfire.info('--- Reduce Phase Complete (Skipped due to no map content) ---')
@@ -123,43 +124,42 @@ async def run_reduce_phase() -> tuple[bool, int]:
 
         # Format and run the prompt
         reduce_user_prompt = REDUCE_USER_MESSAGE_TEMPLATE.replace(
-            '{{CONCATENATED_MARKDOWN_BLOCKS_HERE}}',
-            concatenated_map_data
+            '{{CONCATENATED_MARKDOWN_BLOCKS_HERE}}', concatenated_map_data
         )
 
         try:
             # Use structured output with List[Profile] type from the agent definition
             result = await reduce_agent.run(reduce_user_prompt)
-            
+
             if not result or not result.output or len(result.output) == 0:
                 logfire.info('Reduce agent returned empty output or no profiles.')
                 return False, len(raw_map_outputs)
-            
+
             # Ensure output directory exists
             await output_profiles_dir.mkdir(exist_ok=True, parents=True)
             logfire.info(f'Ensured output directory exists: {output_profiles_dir}')
-            
+
             # Process each profile and write to individual files
             profiles_written = 0
             for profile in result.output:
                 # Generate filename based on sanitized person name
                 filename = f'{sanitize_filename(profile.metadata.name)}.md'
                 profile_path = output_profiles_dir / filename
-                
+
                 # Create YAML frontmatter from metadata
                 frontmatter = yaml.dump(profile.metadata.model_dump(), sort_keys=False)
-                
+
                 # Combine frontmatter with content
                 file_content = f'---\n{frontmatter}---\n\n{profile.content}'
-                
+
                 # Write the file
                 await profile_path.write_text(file_content, encoding='utf-8')
                 logfire.info(f'Wrote profile for {profile.metadata.name} to {profile_path}')
                 profiles_written += 1
-            
+
             logfire.info(f'Reduce phase processed. Wrote {profiles_written} profile files to {output_profiles_dir}')
             logfire.info('--- Reduce Phase Complete ---')
-            
+
             return True, len(sorted_files)
         except Exception as e:
             logfire.error(f'Error during Reduce Agent processing: {e}', exc_info=True)

@@ -96,4 +96,3 @@ async def run_map_phase() -> tuple[int, int]:
                     await send_channel.send(path)
 
     return processed_stats['processed'], processed_stats['failed']
-
