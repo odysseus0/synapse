@@ -23,8 +23,14 @@ import logfire
 import yaml
 from trio import Path
 
-from synapse.agents import REDUCE_USER_MESSAGE_TEMPLATE, reduce_agent
+from synapse.agents import (
+    NEWSLETTER_REDUCE_USER_MESSAGE_TEMPLATE,
+    REDUCE_USER_MESSAGE_TEMPLATE,
+    newsletter_reduce_agent,
+    reduce_agent,
+)
 from synapse.config import settings
+from synapse.exceptions import ReducePhaseError
 
 
 def sanitize_filename(name: str) -> str:

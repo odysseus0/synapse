@@ -14,13 +14,12 @@ from trio import Path
 
 from synapse.config import settings
 from synapse.exceptions import (
-    EmptyInputDirectory,
     FileProcessingError,
     ReducePhaseError,
     SynapseError,
 )
 from synapse.logging import configure_logging
-from synapse.processors.extractors import extract_person_profiles
+from synapse.processors.extractors import get_extraction_function
 from synapse.processors.map import run_map_phase
 from synapse.processors.reduce import run_reduce_phase
 
@@ -31,9 +30,8 @@ class Phase(str, enum.Enum):
     BOTH = 'both'
 
 
-async def setup_directories() -> tuple[Path, Path, Path]:
-    """Set up directories and return paths needed for processing."""
-    input_dir = Path(settings.map_phase.input_transcripts_dir)
+async def setup_directories() -> None:
+    """Set up output directories."""
     map_output_dir = Path(settings.map_phase.output_map_dir)
     profiles_dir = Path(settings.reduce_phase.output_profiles_dir)
 
@@ -42,15 +40,8 @@ async def setup_directories() -> tuple[Path, Path, Path]:
         await profiles_dir.mkdir(exist_ok=True, parents=True)
         logfire.info('Ensured map output directory exists: {dir_path}', dir_path=str(map_output_dir))
         logfire.info('Ensured profiles directory exists: {dir_path}', dir_path=str(profiles_dir))
-
-        # Check if input directory has files
-        input_files = [p for p in await input_dir.glob('*.txt')]
-        if not input_files:
-            raise EmptyInputDirectory(f'No .txt files in {input_dir}')
     except Exception as e:
         raise FileProcessingError(f'Error setting up directories: {e}')
-
-    return input_dir, map_output_dir, profiles_dir
 
 
 async def run_map(check_inputs: bool = True) -> tuple[int, int]:
@@ -59,14 +50,41 @@ async def run_map(check_inputs: bool = True) -> tuple[int, int]:
         await setup_directories()
 
     logfire.info('--- Starting Project Synapse: Map Phase ---')
-    with logfire.span('run_map_phase'):
-        processed_count, failed_count = await run_map_phase(extract_person_profiles)
+    extraction_type = settings.map_phase.extraction_type
+    logfire.info('Using extraction type: {type}', type=extraction_type)
+    
+    # Define directories and their file types
+    directories = [
+        (settings.map_phase.meetings_dir, 'meeting'),
+        (settings.map_phase.telegram_dir, 'telegram'),
+    ]
+    
+    total_processed = 0
+    total_failed = 0
+    
+    # Process each directory with its specific file type
+    for dir_path, file_type in directories:
+        directory = trio.Path(dir_path)
+        if not await directory.exists():
+            continue
+            
+        files = [p for p in await directory.glob('*.txt')]
+        if not files:
+            continue
+            
+        logfire.info('Processing {count} {type} files', count=len(files), type=file_type)
+        extraction_func = get_extraction_function(extraction_type, file_type)
+        
+        with logfire.span(f'process_{file_type}'):
+            processed, failed = await run_map_phase(files, extraction_func)
+            total_processed += processed
+            total_failed += failed
 
     logfire.info('--- Map Phase Complete ---')
-    logfire.info('Successfully processed: {count}', count=processed_count)
-    logfire.info('Failed to process: {count}', count=failed_count)
+    logfire.info('Successfully processed: {count}', count=total_processed)
+    logfire.info('Failed to process: {count}', count=total_failed)
 
-    return processed_count, failed_count
+    return total_processed, total_failed
 
 
 async def run_reduce(check_inputs: bool = True) -> tuple[bool, int]:
@@ -97,11 +115,12 @@ async def main(phase: Phase = Phase.BOTH):
     configure_logging()
 
     # --- Configuration Setup ---
-    input_dir, map_output_dir, profiles_dir = await setup_directories()
+    await setup_directories()
 
-    logfire.info('Input directory: {input_dir}', input_dir=str(input_dir))
-    logfire.info('Map output directory: {output_dir}', output_dir=str(map_output_dir))
-    logfire.info('Profiles output directory: {profiles_dir}', profiles_dir=str(profiles_dir))
+    logfire.info('Extraction type: {type}', type=settings.map_phase.extraction_type)
+    logfire.info('Meetings directory: {dir}', dir=settings.map_phase.meetings_dir)
+    logfire.info('Telegram directory: {dir}', dir=settings.map_phase.telegram_dir)
+    logfire.info('Map output directory: {output_dir}', output_dir=settings.map_phase.output_map_dir)
     logfire.info('Concurrency limit: {concurrency}', concurrency=settings.processing.concurrency)
     logfire.info('Using Map LLM model: {model}', model=settings.map_phase.llm_model)
     logfire.info('Using Reduce LLM model: {model}', model=settings.reduce_phase.llm_model)
@@ -110,7 +129,7 @@ async def main(phase: Phase = Phase.BOTH):
 
     if phase in (Phase.MAP, Phase.BOTH):
         await run_map(check_inputs=False)
-        logfire.info('Map outputs saved to: {output_dir}', output_dir=str(map_output_dir))
+        logfire.info('Map outputs saved to: {output_dir}', output_dir=settings.map_phase.output_map_dir)
         logfire.info('--------------------------')
 
     if phase in (Phase.REDUCE, Phase.BOTH):

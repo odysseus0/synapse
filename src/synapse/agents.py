@@ -152,3 +152,296 @@ map_agent = Agent(
 reduce_agent = Agent(
     model=settings.reduce_phase.llm_model, instructions=REDUCE_SYSTEM_PROMPT, output_type=list[Profile]
 )
+
+# Newsletter-specific prompts and agents
+NEWSLETTER_MAP_SYSTEM_PROMPT = dedent("""
+    You are an expert content extractor identifying newsletter-worthy information from team communications.
+    Your task is to comprehensively extract all potentially valuable content that could be used in a weekly newsletter.
+    
+    The goal is to capture information that helps team members:
+    - Stay informed about important decisions and changes
+    - Learn about technical breakthroughs and solutions
+    - Track progress across different projects
+    - Understand cross-team dependencies and collaborations
+    - Maintain awareness of team culture and energy
+    
+    Be inclusive in extraction - it's better to capture too much context than too little.
+    The synthesis phase will handle final curation and presentation.
+    
+    Focus on extracting:
+    - Strategic decisions, pivots, or direction changes
+    - Technical insights, solutions, and breakthroughs
+    - Progress updates that show momentum
+    - Action items with clear owners
+    - Important discussions and debates
+    - Shared resources with context
+    - Team dynamics and culture moments
+    - Emerging concerns or blockers
+""")
+
+NEWSLETTER_MEETING_MAP_TEMPLATE = dedent("""
+    Extract newsletter-worthy content from this meeting transcript.
+    
+    Meeting: {transcript_filename}
+    
+    <transcript>
+    {transcript_text}
+    </transcript>
+    
+    Extract and structure the following information:
+    
+    ## Meeting: {transcript_filename}
+    
+    ### Meeting Context
+    * Date: [Extract if available]
+    * Type: [All-hands, Engineering, Product, etc. if identifiable]
+    * Key Attendees: [List main participants]
+    
+    ### Decisions Made
+    * Decision: [What was decided]
+      - Context: [Why this decision was needed]
+      - Made by: [Who made or championed this decision]
+      - Impact: [Who/what this affects]
+      - Related Discussion: [Key points from the debate if any]
+    
+    ### Technical Insights & Solutions
+    * Insight: [Technical discovery or solution]
+      - Problem Solved: [What challenge this addresses]
+      - Discovered by: [Who shared this insight]
+      - Technical Details: [Enough detail to understand the breakthrough]
+      - Potential Applications: [How this might be used]
+    
+    ### Progress & Achievements
+    * Achievement: [What was completed or demonstrated]
+      - Owner: [Who accomplished this]
+      - Significance: [Why this matters]
+      - Next Steps: [What comes after this]
+    
+    ### Action Items
+    * Task: [Specific action to be taken]
+      - Owner: [Person responsible]
+      - Due Date: [If mentioned]
+      - Dependencies: [What/who this depends on]
+      - Context: [Why this is needed]
+    
+    ### Important Discussions
+    * Topic: [What was discussed]
+      - Participants: [Key people in discussion]
+      - Main Points: [Key arguments or perspectives]
+      - Outcome: [Consensus, decision, or next steps]
+      - Open Questions: [Unresolved aspects]
+    
+    ### Resources & Links Mentioned
+    * Resource: [What was shared]
+      - URL: [If provided]
+      - Shared by: [Who mentioned it]
+      - Purpose: [Why this was relevant]
+    
+    ### Concerns & Blockers Raised
+    * Issue: [Problem or concern raised]
+      - Raised by: [Who brought this up]
+      - Impact: [What this blocks or affects]
+      - Proposed Solutions: [If any were discussed]
+    
+    ### Notable Quotes
+    * "[Exact quote]" - [Speaker]
+      - Context: [Why this quote is significant]
+    
+    ### Team Dynamics
+    * [Any notable team interactions, culture moments, or energy indicators]
+    
+    Only include sections where relevant content exists. Preserve specific names, technical terms, and enough context for someone who wasn't present to understand the significance.
+""")
+
+NEWSLETTER_TELEGRAM_MAP_TEMPLATE = dedent("""
+    Extract newsletter-worthy content from this Telegram discussion.
+    
+    Source: {transcript_filename}
+    
+    <telegram_threads>
+    {transcript_text}
+    </telegram_threads>
+    
+    Extract and structure the following information:
+    
+    ## Telegram Activity: {transcript_filename}
+    
+    ### Period Context
+    * Date Range: [Extract if identifiable]
+    * Active Participants: [Most engaged members]
+    * Thread Count: [Approximate number of distinct discussions]
+    
+    ### Significant Discussions
+    * Thread Topic: [Main subject of discussion]
+      - Participants: [Key contributors]
+      - Problem/Question: [What initiated the discussion]
+      - Key Points: [Main arguments or insights shared]
+      - Resolution: [How it concluded, if at all]
+      - Thread Length: [Rough indicator of engagement]
+    
+    ### Problems & Solutions
+    * Problem Raised: [Technical or process challenge]
+      - Asked by: [Who needed help]
+      - Solutions Offered: [Different approaches suggested]
+        - By: [Who suggested each]
+        - Selected Approach: [If one was chosen]
+      - Outcome: [Whether it was resolved]
+    
+    ### Resources Shared
+    * Resource: [What was shared]
+      - Type: [Link, document, tool, article, etc.]
+      - URL: [If provided]
+      - Shared by: [Who posted it]
+      - Context: [Why it was shared]
+      - Reactions: [How others responded]
+    
+    ### Decisions & Consensus
+    * Decision Point: [What needed to be decided]
+      - Options Discussed: [Different possibilities]
+      - Participants: [Who weighed in]
+      - Final Direction: [What was agreed upon]
+      - Dissenting Views: [If any]
+    
+    ### Announcements & Updates
+    * Announcement: [What was announced]
+      - From: [Who announced it]
+      - Impact: [Who/what this affects]
+      - Reactions: [How team responded]
+    
+    ### Emerging Patterns
+    * Pattern: [Recurring theme or concern]
+      - Frequency: [How often it came up]
+      - Different Contexts: [Various discussions where it appeared]
+      - Key Voices: [Who consistently engaged with this topic]
+    
+    ### Technical Discoveries
+    * Discovery: [New tool, approach, or insight]
+      - Discovered by: [Who found/shared it]
+      - What it Solves: [Problem it addresses]
+      - Team Interest: [How others reacted]
+    
+    ### Notable Interactions
+    * "[Memorable quote or exchange]"
+      - Participants: [Who was involved]
+      - Context: [What made this notable]
+      - Team Reaction: [Emojis, responses]
+    
+    ### Concerns Raised
+    * Concern: [Issue brought up]
+      - Raised by: [Who flagged it]
+      - Severity: [How urgent/important]
+      - Discussion: [How team responded]
+    
+    Include all sections with relevant content. Preserve thread structure and relationships between messages where important. Keep enough context to understand the flow of conversations.
+""")
+
+# Initialize newsletter map agents
+newsletter_meeting_map_agent = Agent(
+    model=settings.map_phase.llm_model,
+    instructions=NEWSLETTER_MAP_SYSTEM_PROMPT,
+)
+
+newsletter_telegram_map_agent = Agent(
+    model=settings.map_phase.llm_model,
+    instructions=NEWSLETTER_MAP_SYSTEM_PROMPT,
+)
+
+# Newsletter reduce agent and prompts
+NEWSLETTER_REDUCE_SYSTEM_PROMPT = dedent("""
+    You are an expert newsletter editor who synthesizes team communications into engaging, informative weekly newsletters.
+    Your task is to create a cohesive, readable newsletter that helps team members stay informed and connected.
+    
+    Key principles:
+    - Be concise but comprehensive - aim for a 5-10 minute read
+    - Highlight what matters most to the team
+    - Maintain a professional yet friendly tone
+    - Connect related topics across different sources
+    - Preserve important technical details while remaining accessible
+    - Include enough context for team members who may have missed discussions
+    
+    Structure the newsletter according to the defined template, focusing on:
+    - Major achievements and breakthroughs
+    - Key decisions and their impact
+    - Technical discoveries and solutions
+    - Team dynamics and culture
+    - Important resources and links
+    
+    Synthesize information from multiple sources (meetings and Telegram) to tell cohesive stories.
+    When similar topics appear in different contexts, combine them into unified narratives.
+""")
+
+NEWSLETTER_REDUCE_USER_MESSAGE_TEMPLATE = dedent("""
+    Create a comprehensive weekly newsletter from the following extracted content from meetings and Telegram discussions.
+    
+    <extracted_content>
+    {{CONCATENATED_NEWSLETTER_EXTRACTS}}
+    </extracted_content>
+    
+    Generate a newsletter following this exact structure:
+    
+    # FlashbotsX Weekly Newsletter
+    
+    *Week of [Date Range]*
+    
+    ---
+    
+    ## 📍 The Week's Highlights
+    
+    [2-4 bullet points covering the most important wins, breakthroughs, and strategic decisions. Focus on what will have lasting impact.]
+    
+    ## 🎯 Progress & Momentum
+    
+    ### What Shipped
+    [List completed features, demos, or milestones achieved this week]
+    
+    ### Key Achievements
+    [Notable accomplishments by team members or projects]
+    
+    ## 💡 Technical Insights & Solutions
+    
+    [2-3 subsections covering the most interesting technical discoveries, solutions to problems, or implementation breakthroughs. Include enough technical detail to be useful but keep it accessible.]
+    
+    ## 🎪 Team Spotlight
+    
+    ### Shoutouts
+    [Recognize team members who made notable contributions]
+    
+    ### Notable Moments
+    [Interesting interactions, funny quotes, or team culture highlights]
+    
+    ## 🚧 Important Updates
+    
+    ### Decisions & Changes
+    [Strategic decisions or process changes that affect the team]
+    
+    ### Heads Up
+    [Upcoming migrations, tool changes, or other things team members should prepare for]
+    
+    ### Open Questions & Blockers
+    [Unresolved issues that need team attention]
+    
+    ## 💬 Key Discussions
+    
+    [2-3 of the most significant discussions from the week, including the core question, different perspectives, and outcomes]
+    
+    ## 🔗 Resources & Links
+    
+    [Curated list of the most useful resources shared this week, organized by category with context for why each is valuable]
+    
+    ---
+    
+    *Generated from [X] meetings and [Y] days of Telegram activity*
+    
+    Ensure the newsletter:
+    - Flows naturally between sections
+    - Balances technical depth with readability
+    - Includes specific names and attributions where relevant
+    - Provides enough context for those who missed the original discussions
+    - Maintains an engaging, professional tone throughout
+""")
+
+# Initialize newsletter reduce agent
+newsletter_reduce_agent = Agent(
+    model=settings.reduce_phase.llm_model,
+    instructions=NEWSLETTER_REDUCE_SYSTEM_PROMPT,
+)

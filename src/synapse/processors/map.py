@@ -13,14 +13,16 @@ from synapse.config import settings
 
 
 async def run_map_phase(
-    extract_fn: Callable[[str, str], Awaitable[str]]
+    files: list[Path],
+    extract_fn: Callable[[str, str], Awaitable[str]],
 ) -> tuple[int, int]:
     """
-    Processes transcript files concurrently to generate Map phase Markdown outputs.
+    Processes files concurrently to generate Map phase Markdown outputs.u
 
     Uses configuration from module-level settings.
 
     Args:
+        files: List of file paths to process.
         extract_fn: Async function that takes (content, filename) and returns extracted text.
 
     Returns:
@@ -29,33 +31,30 @@ async def run_map_phase(
     # Use module-level settings
     concurrency = settings.processing.concurrency
     output_dir = Path(settings.map_phase.output_map_dir)
-    input_dir = Path(settings.map_phase.input_transcripts_dir)
 
-    # Get transcript files from the configured input directory
-    transcript_paths = [p for p in await input_dir.glob('*.txt')]
-    logfire.info(f'Found {len(transcript_paths)} transcript files in {input_dir}')
+    logfire.info(f'Processing {len(files)} files')
     processed_stats = {'processed': 0, 'failed': 0}
     send_channel, receive_channel = trio.open_memory_channel[Path](0)
 
     async def map_worker(worker_receive_channel: trio.MemoryReceiveChannel[Path]):
-        """Worker task to process one transcript file."""
-        async for transcript_path in worker_receive_channel:
-            relative_path_str = str(transcript_path)
-            output_filename = transcript_path.name.replace('.txt', '.map.md')
+        """Worker task to process one file."""
+        async for file_path in worker_receive_channel:
+            relative_path_str = str(file_path)
+            output_filename = file_path.stem + '.map.md'
             output_path = output_dir / output_filename
 
-            with logfire.span('process_transcript_map', filepath=relative_path_str):
+            with logfire.span('process_file_map', filepath=relative_path_str):
                 try:
-                    # Read and check transcript content
-                    transcript_text = await transcript_path.read_text(encoding='utf-8')
-                    transcript_text = transcript_text.strip()
+                    # Read and check file content
+                    file_text = await file_path.read_text(encoding='utf-8')
+                    file_text = file_text.strip()
 
-                    if not transcript_text:
-                        logfire.warn('Skipping empty transcript file: {filepath}', filepath=relative_path_str)
+                    if not file_text:
+                        logfire.warn('Skipping empty file: {filepath}', filepath=relative_path_str)
                         continue  # Skip empty files
 
                     # Process with provided extract_fn
-                    map_output_content = await extract_fn(transcript_text, transcript_path.name)
+                    map_output_content = await extract_fn(file_text, file_path.name)
 
                     # Save output if useful
                     if (
@@ -81,7 +80,7 @@ async def run_map_phase(
                     progress.update(map_task_id, advance=1)
 
     with Progress() as progress:
-        map_task_id = progress.add_task('[cyan]Mapping transcripts...', total=len(transcript_paths))
+        map_task_id = progress.add_task('[cyan]Mapping files...', total=len(files))
 
         # Ensure output directory exists (direct approach)
         await output_dir.mkdir(exist_ok=True, parents=True)
@@ -92,9 +91,9 @@ async def run_map_phase(
             for _ in range(concurrency):
                 nursery.start_soon(map_worker, receive_channel.clone())
 
-            # Send transcript paths to workers
+            # Send file paths to workers
             async with send_channel:
-                for path in transcript_paths:
+                for path in files:
                     await send_channel.send(path)
 
     return processed_stats['processed'], processed_stats['failed']

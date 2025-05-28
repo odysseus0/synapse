@@ -38,6 +38,9 @@ class MapPhaseConfig(BaseModel):
         default='./transcripts_sample', description='Directory containing input .txt transcripts'
     )
     output_map_dir: str = Field(default='./map_outputs', description='Directory to save the map phase .md outputs')
+    extraction_type: str = Field(default='newsletter', description='Type of extraction to perform')
+    meetings_dir: str = Field(default='./data/meetings', description='Directory containing meeting transcripts')
+    telegram_dir: str = Field(default='./data/telegram', description='Directory containing Telegram exports')
 
 
 class ReducePhaseConfig(BaseModel):
