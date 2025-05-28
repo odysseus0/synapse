@@ -17,20 +17,14 @@ Note on MapReduce Design:
 """
 
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 import logfire
 import yaml
 from trio import Path
 
-from synapse.agents import (
-    NEWSLETTER_REDUCE_USER_MESSAGE_TEMPLATE,
-    REDUCE_USER_MESSAGE_TEMPLATE,
-    newsletter_reduce_agent,
-    reduce_agent,
-)
 from synapse.config import settings
-from synapse.exceptions import ReducePhaseError
 
 
 def sanitize_filename(name: str) -> str:
@@ -81,23 +75,25 @@ async def sort_map_files(markdown_files_list: list[Path]) -> list[Path]:
     return [path for _, path in sorted_parsed] + sorted_unparseable
 
 
-async def run_reduce_phase() -> tuple[bool, int]:
+async def run_reduce_phase(
+    reduce_fn: Callable[[str], Awaitable[str]],
+) -> tuple[bool, int]:
     """
-    Reads map phase outputs, concatenates them, runs them through a reduce agent,
-    and saves individual profile files with YAML frontmatter for each person.
+    Reads map phase outputs, concatenates them, and runs them through the provided reduce function.
 
-    Uses configuration from module-level settings.
+    Args:
+        reduce_fn: Async function that takes concatenated content and returns reduced output.
 
     Returns:
         A tuple containing (success: bool, processed_files_count: int)
     """
     # Use module-level settings
     map_output_dir = Path(settings.map_phase.output_map_dir)
-    output_profiles_dir = Path(settings.reduce_phase.output_profiles_dir)
+    output_dir = Path(settings.reduce_phase.output_dir)
 
     logfire.info('--- Starting Reduce Phase ---')
     logfire.info(f'Reading map outputs from: {map_output_dir}')
-    logfire.info(f'Target directory for profile outputs: {output_profiles_dir}')
+    logfire.info(f'Target directory for outputs: {output_dir}')
 
     # Find and sort all map output files
     markdown_files: list[Path] = [path for path in await map_output_dir.glob('*.map.md')]
@@ -128,42 +124,21 @@ async def run_reduce_phase() -> tuple[bool, int]:
         concatenated_map_data = '\n\n'.join(raw_map_outputs)
         logfire.info(f'Processing {len(raw_map_outputs)} map outputs. Total size: {len(concatenated_map_data)} chars.')
 
-        # Format and run the prompt
-        reduce_user_prompt = REDUCE_USER_MESSAGE_TEMPLATE.replace(
-            '{{CONCATENATED_MARKDOWN_BLOCKS_HERE}}', concatenated_map_data
-        )
-
         try:
-            # Use structured output with List[Profile] type from the agent definition
-            result = await reduce_agent.run(reduce_user_prompt)
+            # Run the reduce function
+            result = await reduce_fn(concatenated_map_data)
 
-            if not result or not result.output or len(result.output) == 0:
-                logfire.info('Reduce agent returned empty output or no profiles.')
+            if not result:
+                logfire.info('Reduce function returned empty output.')
                 return False, len(raw_map_outputs)
 
-            # Ensure output directory exists
-            await output_profiles_dir.mkdir(exist_ok=True, parents=True)
-            logfire.info(f'Ensured output directory exists: {output_profiles_dir}')
-
-            # Process each profile and write to individual files
-            profiles_written = 0
-            for profile in result.output:
-                # Generate filename based on sanitized person name
-                filename = f'{sanitize_filename(profile.metadata.name)}.md'
-                profile_path = output_profiles_dir / filename
-
-                # Create YAML frontmatter from metadata
-                frontmatter = yaml.dump(profile.metadata.model_dump(), sort_keys=False)
-
-                # Combine frontmatter with content
-                file_content = f'---\n{frontmatter}---\n\n{profile.content}'
-
-                # Write the file
-                await profile_path.write_text(file_content, encoding='utf-8')
-                logfire.info(f'Wrote profile for {profile.metadata.name} to {profile_path}')
-                profiles_written += 1
-
-            logfire.info(f'Reduce phase processed. Wrote {profiles_written} profile files to {output_profiles_dir}')
+            # For now, write the result to a single file
+            # TODO: Handle different output patterns based on extraction type
+            output_file = output_dir / 'reduce_output.md'
+            await output_dir.mkdir(exist_ok=True, parents=True)
+            await output_file.write_text(result, encoding='utf-8')
+            
+            logfire.info(f'Reduce phase processed. Output saved to {output_file}')
             logfire.info('--- Reduce Phase Complete ---')
 
             return True, len(sorted_files)

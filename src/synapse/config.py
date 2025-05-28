@@ -34,9 +34,6 @@ class MapPhaseConfig(BaseModel):
     llm_model: str = Field(
         default='google-gla:gemini-2.5-flash-preview-04-17', description='LLM model to use for processing'
     )
-    input_transcripts_dir: str = Field(
-        default='./transcripts_sample', description='Directory containing input .txt transcripts'
-    )
     output_map_dir: str = Field(default='./map_outputs', description='Directory to save the map phase .md outputs')
     extraction_type: str = Field(default='newsletter', description='Type of extraction to perform')
     meetings_dir: str = Field(default='./data/meetings', description='Directory containing meeting transcripts')
@@ -53,6 +50,9 @@ class ReducePhaseConfig(BaseModel):
 
     output_profiles_dir: str = Field(
         default='./profiles', description='Directory to save individual profile Markdown files'
+    )
+    output_dir: str = Field(
+        default='./output', description='Directory to save reduce phase outputs'
     )
     llm_model: str = Field(
         default='google-gla:gemini-2.5-flash-preview-04-17', description='LLM model to use for processing'

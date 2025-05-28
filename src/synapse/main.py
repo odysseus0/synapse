@@ -19,7 +19,7 @@ from synapse.exceptions import (
     SynapseError,
 )
 from synapse.logging import configure_logging
-from synapse.processors.extractors import get_extraction_function
+from synapse.processors.extractors import get_extraction_function, get_reduce_function
 from synapse.processors.map import run_map_phase
 from synapse.processors.reduce import run_reduce_phase
 
@@ -93,8 +93,15 @@ async def run_reduce(check_inputs: bool = True) -> tuple[bool, int]:
         await setup_directories()
 
     logfire.info('--- Starting Project Synapse: Reduce Phase ---')
+    extraction_type = settings.map_phase.extraction_type
+    logfire.info('Using extraction type: {type}', type=extraction_type)
+    
     try:
-        success, processed_files = await run_reduce_phase()
+        # Get the appropriate reduce function
+        reduce_func = get_reduce_function(extraction_type)
+        
+        # Run the reduce phase with the function
+        success, processed_files = await run_reduce_phase(reduce_func)
         logfire.info(
             'Reduce phase success: {success}, processed files: {count}', success=success, count=processed_files
         )

@@ -124,19 +124,23 @@ The agreed-upon structure for the weekly newsletter:
 - [x] Created newsletter-specific agents with tailored prompts for meetings and Telegram
 - [x] Extended MapReduce infrastructure to support multiple extraction types
 - [x] Generated Telegram transcript from filtered export (output/telegram_transcript_week_2025-04-28.md)
-
-### 🔄 In Progress
-
-- [ ] Integrate newsletter extraction functions into main.py pipeline
-- [ ] Run map phase on meeting transcripts with newsletter extraction
-- [ ] Implement newsletter reduce phase for synthesis
+- [x] Integrated newsletter extraction functions into main.py pipeline with directory-based routing
+- [x] Implemented polymorphic reduce phase following map phase patterns
+- [x] Tested complete pipeline with all data files (meetings + Telegram)
+- [x] Generated final newsletter output (output/newsletter_week_2025-04-28.md) in ~2 minutes
+- [x] Verified newsletter covers all required sections per spec
+- [x] Updated configuration system and .env template
 
 ### 📋 To Do
 
-- [ ] Test complete pipeline with all data files (meetings + Telegram)
 - [ ] Create README for running the newsletter generation process
-- [ ] Generate final newsletter output
-- [ ] Verify newsletter covers all required sections per spec
+
+### 🔧 Technical Debt (Simplified for MVP)
+
+- [ ] Retrofit person profiles functionality that was removed from reduce.py
+  - Original reduce phase wrote individual profile files with YAML frontmatter
+  - Currently returns simple string output instead of structured Profile objects
+  - Need to handle different output patterns (multiple files vs single file) based on extraction type
 
 ### 🚧 Blockers
 
@@ -158,19 +162,22 @@ The agreed-upon structure for the weekly newsletter:
 **Agreed Design:**
 
 Use directory structure to explicitly indicate file types:
-```
+
+```bash
 data/
   meetings/      # All meeting transcripts go here
   telegram/      # All Telegram exports go here
 ```
 
 **Benefits:**
+
 - User intent is explicit through folder organization
 - No hidden filename conventions
 - Naturally supports multiple Telegram groups in future (e.g., `telegram/main-group/`)
 - Zero configuration needed - just put files in the right folder
 
 **Implementation:**
+
 - Add directory paths to config (meetings_dir, telegram_dir)
 - Process each directory separately with known file type
 - Route to appropriate extraction function based on directory source

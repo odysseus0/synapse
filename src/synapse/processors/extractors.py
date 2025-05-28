@@ -9,14 +9,21 @@ from collections.abc import Awaitable, Callable
 from synapse.agents import (
     MAP_USER_MESSAGE_TEMPLATE,
     NEWSLETTER_MEETING_MAP_TEMPLATE,
+    NEWSLETTER_REDUCE_USER_MESSAGE_TEMPLATE,
     NEWSLETTER_TELEGRAM_MAP_TEMPLATE,
+    REDUCE_USER_MESSAGE_TEMPLATE,
     map_agent,
     newsletter_meeting_map_agent,
+    newsletter_reduce_agent,
     newsletter_telegram_map_agent,
+    reduce_agent,
 )
 
 # Type alias for extraction functions
 ExtractionFunction = Callable[[str, str], Awaitable[str]]
+
+# Type alias for reduce functions
+ReduceFunction = Callable[[str], Awaitable[str]]
 
 
 async def extract_person_profiles(content: str, filename: str) -> str:
@@ -87,5 +94,51 @@ def get_extraction_function(extraction_type: str, file_type: str) -> ExtractionF
             return extract_newsletter_meeting
         else:
             raise ValueError(f'Unknown file type: {file_type}')
+    else:
+        raise ValueError(f'Unknown extraction type: {extraction_type}')
+
+
+# Reduce functions
+async def reduce_person_profiles(concatenated_content: str) -> str:
+    """Reduce person profiles to structured YAML and markdown format.
+    
+    This is a placeholder for future implementation.
+    """
+    # TODO: Implement person profiles reduction
+    return "Person profiles reduction not yet implemented"
+
+
+async def reduce_newsletter(concatenated_content: str) -> str:
+    """Reduce newsletter extracts into a final newsletter.
+    
+    Returns the complete newsletter markdown content.
+    """
+    # Format and run the prompt
+    reduce_user_prompt = NEWSLETTER_REDUCE_USER_MESSAGE_TEMPLATE.replace(
+        '{{CONCATENATED_NEWSLETTER_EXTRACTS}}', concatenated_content
+    )
+    
+    # Run the newsletter reduce agent
+    result = await newsletter_reduce_agent.run(reduce_user_prompt)
+    
+    return result.output
+
+
+def get_reduce_function(extraction_type: str) -> ReduceFunction:
+    """Get the appropriate reduce function based on extraction type.
+    
+    Args:
+        extraction_type: Type of extraction ('person_profiles', 'newsletter')
+        
+    Returns:
+        The appropriate reduce function
+        
+    Raises:
+        ValueError: If extraction_type is unknown
+    """
+    if extraction_type == 'person_profiles':
+        return reduce_person_profiles
+    elif extraction_type == 'newsletter':
+        return reduce_newsletter
     else:
         raise ValueError(f'Unknown extraction type: {extraction_type}')
