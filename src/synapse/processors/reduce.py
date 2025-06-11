@@ -21,7 +21,6 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 import logfire
-import yaml
 from trio import Path
 
 from synapse.config import settings
@@ -132,9 +131,8 @@ async def run_reduce_phase(
                 logfire.info('Reduce function returned empty output.')
                 return False, len(raw_map_outputs)
 
-            # For now, write the result to a single file
-            # TODO: Handle different output patterns based on extraction type
-            output_file = output_dir / 'reduce_output.md'
+            # Simple fixed output filename
+            output_file = output_dir / 'newsletter.md'
             await output_dir.mkdir(exist_ok=True, parents=True)
             await output_file.write_text(result, encoding='utf-8')
             

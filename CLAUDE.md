@@ -4,13 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Synapse is a text-based meeting analysis tool that uses a MapReduce-inspired approach to process meeting transcripts and extract synthesized information about key individuals. It uses LLMs (specifically Google's Gemini) to identify and consolidate information about people across multiple meetings. This is a personal script utility program.
+Synapse is a text analysis tool that uses a MapReduce-inspired approach to process meeting transcripts and Telegram conversations to generate comprehensive weekly newsletters. It uses LLMs (specifically Google's Gemini) to extract and synthesize key information across multiple sources.
 
 The system follows a two-phase process:
-1. **Map Phase**: Processes each transcript individually in parallel, generating structured Markdown summaries for each key person
-2. **Reduce Phase**: Combines and synthesizes information across all transcripts to produce comprehensive profiles
+1. **Map Phase**: Processes each input file (meeting transcript or Telegram export) individually in parallel, extracting newsletter-worthy content such as key decisions, project updates, technical discussions, and notable moments
+2. **Reduce Phase**: Combines and synthesizes all extracted content to produce a cohesive weekly newsletter
 
-Note: The current implementation uses a simplified reduce approach that takes advantage of Gemini's large 1M context window to process all map outputs in a single operation. The architecture is designed to be extended to a true distributed MapReduce implementation if needed for larger datasets that exceed context limits.
+The system uses directory-based file type detection:
+- Meeting transcripts go in `data/meetings/`
+- Telegram exports go in `data/telegram/`
+
+Note: The current implementation uses a simplified reduce approach that takes advantage of Gemini's large context window to process all map outputs in a single operation.
 
 ## Commands
 
@@ -83,8 +87,8 @@ uv run -m pytest -xvs
 
 2. **Execution Flow** (`main.py`):
    - `main()`: Primary async function controlling the full execution flow
-   - `run_map_phase()`: Processes transcript files concurrently to generate map outputs
-   - `run_reduce_phase()`: Aggregates map outputs and synthesizes final profiles
+   - `run_map_phase()`: Processes input files concurrently to generate map outputs
+   - `run_reduce_phase()`: Aggregates map outputs and synthesizes final newsletter
 
 3. **Error Handling** (`exceptions.py`):
    - Structured hierarchy of exceptions for different failure modes
@@ -92,13 +96,15 @@ uv run -m pytest -xvs
 
 ### Data Flow
 
-1. Input text transcripts (from `./transcripts` or configured directory)
-2. Map Phase: Each transcript is processed individually by the LLM using the map prompt
-   - Outputs individual Markdown files for each transcript in the map output directory
-3. Reduce Phase: All map outputs are concatenated and fed to a more powerful LLM
-   - Outputs a single Markdown file with synthesized profiles in the specified output location
-   - Current implementation processes all outputs in a single LLM call since Gemini's 1M context window is sufficient for moderate data sizes
-   - The design can be extended to a true MapReduce implementation for larger datasets
+1. Input files organized by type:
+   - Meeting transcripts in `data/meetings/`
+   - Telegram exports in `data/telegram/`
+2. Map Phase: Each file is processed individually by the LLM using content-specific extraction prompts
+   - Outputs individual Markdown files for each input in the map output directory
+   - Different extraction functions for meetings vs Telegram content
+3. Reduce Phase: All map outputs are concatenated and fed to the LLM
+   - Outputs a newsletter file named `newsletter.md`
+   - Current implementation processes all outputs in a single LLM call
 
 ### Key Dependencies
 
@@ -145,9 +151,10 @@ with Agent.override("google-gla:gemini-2.5-flash-preview-04-17",
 ### Configuration
 
 The system is highly configurable through environment variables with the `SYNAPSE_` prefix:
-- `SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR`: Directory for input transcripts
+- `SYNAPSE_MAP_PHASE__MEETINGS_DIR`: Directory for meeting transcript files
+- `SYNAPSE_MAP_PHASE__TELEGRAM_DIR`: Directory for Telegram export files
 - `SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR`: Directory for map phase outputs
 - `SYNAPSE_MAP_PHASE__LLM_MODEL`: LLM model to use for map phase
-- `SYNAPSE_REDUCE_PHASE__OUTPUT_PROFILES_DIR`: Directory for final profile outputs
+- `SYNAPSE_REDUCE_PHASE__OUTPUT_DIR`: Directory for final newsletter output
 - `SYNAPSE_REDUCE_PHASE__LLM_MODEL`: LLM model to use for reduce phase
-- `SYNAPSE_PROCESSING__CONCURRENCY`: Number of concurrent transcript processing tasks
+- `SYNAPSE_PROCESSING__CONCURRENCY`: Number of concurrent processing tasks

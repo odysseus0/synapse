@@ -33,13 +33,13 @@ class Phase(str, enum.Enum):
 async def setup_directories() -> None:
     """Set up output directories."""
     map_output_dir = Path(settings.map_phase.output_map_dir)
-    profiles_dir = Path(settings.reduce_phase.output_profiles_dir)
+    output_dir = Path(settings.reduce_phase.output_dir)
 
     try:
         await map_output_dir.mkdir(exist_ok=True, parents=True)
-        await profiles_dir.mkdir(exist_ok=True, parents=True)
+        await output_dir.mkdir(exist_ok=True, parents=True)
         logfire.info('Ensured map output directory exists: {dir_path}', dir_path=str(map_output_dir))
-        logfire.info('Ensured profiles directory exists: {dir_path}', dir_path=str(profiles_dir))
+        logfire.info('Ensured output directory exists: {dir_path}', dir_path=str(output_dir))
     except Exception as e:
         raise FileProcessingError(f'Error setting up directories: {e}')
 

@@ -1,42 +1,40 @@
-# Synapse: People Synthesis Using MapReduce
+# Synapse: Weekly Newsletter Generator
 
-Synapse is a text-based meeting analysis tool that uses a MapReduce approach to process meeting transcripts and extract synthesized information about key individuals. It uses LLMs to identify and consolidate information about people across multiple meetings.
+Synapse is a text analysis tool that uses a MapReduce approach to process meeting transcripts and Telegram conversations, generating comprehensive weekly newsletters. It uses LLMs to extract and synthesize key information across multiple sources.
 
 ## Overview
 
-Synapse processes plain text meeting transcripts to automatically:
+Synapse automatically generates weekly newsletters by processing:
 
-1. Identify key individuals mentioned in meetings
-2. Synthesize structured information about their contributions, action items, decisions, and interactions
-3. Generate comprehensive profiles by consolidating information across multiple transcripts
+- **Meeting Transcripts**: Extracts key decisions, project updates, action items, and notable discussions
+- **Telegram Conversations**: Captures important announcements, technical discussions, shared resources, and community highlights
 
 The system uses a two-phase MapReduce approach:
 
-- **Map Phase**: Processes each transcript individually, generating structured Markdown summaries for each key person
-- **Reduce Phase**: Combines and synthesizes information across all transcripts to produce comprehensive profiles
+- **Map Phase**: Processes each input file individually to extract newsletter-worthy content
+- **Reduce Phase**: Combines and synthesizes all extracted content into a cohesive weekly newsletter
 
 ## Features
 
-- Processes plain text meeting transcripts (.txt files)
-- Generates structured Markdown outputs
-- Performs entity resolution to connect mentions of the same person across meetings
-- Extracts action items, decisions, opinions, and interaction patterns
-- Generates comprehensive, structured profiles of key individuals
-- Supports concurrent processing of transcripts for efficiency
+- Processes plain text meeting transcripts and Telegram exports
+- Generates structured, readable newsletters in Markdown format
+- Supports concurrent processing for efficiency
+- Automatically categorizes content by importance and topic
+- Creates newsletters optimized for 5-10 minute reading time
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.12 or higher
-- Access to Google's Gemini AI API
+- Access to Google's Gemini AI API (or other compatible LLM)
 
 ### Setup
 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/odysseus0/synapse.git
+   git clone https://github.com/yourusername/synapse.git
    cd synapse
    ```
 
@@ -53,58 +51,105 @@ The system uses a two-phase MapReduce approach:
    # Edit .env with your API keys and configuration
    ```
 
-4. Set up your Gemini API key:
+4. Set up your API key:
    - Obtain an API key from Google AI Studio (https://makersuite.google.com/app/apikey)
    - Add your API key to the .env file: `GEMINI_API_KEY=your_api_key_here`
 
 ## Usage
 
-1. Place your meeting transcript text files in your input directory (default: `./transcripts_sample/`)
-   - Transcripts should be simple text files with speaker labels (e.g., "Speaker 1:", "John:", etc.)
+### Directory Structure
 
-2. Run the tool (processes both map and reduce phases):
+Organize your input files by type:
 
-   ```bash
-   # Using the module directly with uv
-   uv run -m synapse
-   
-   # OR using the installed package script
-   python -m synapse
-   ```
+```
+data/
+├── meetings/       # Place meeting transcript files here
+│   ├── 2025-04-28 all-hands.txt
+│   └── 2025-04-30 engineering.txt
+└── telegram/       # Place Telegram export files here
+    └── telegram_week_2025-04-28.txt
+```
 
-3. Results will be generated in:
-   - Map phase results: Your configured map outputs directory (default: `./map_outputs/`)
-   - Final synthesized profiles: Your configured profiles directory (default: `./profiles/`)
+### Running the Newsletter Generator
+
+Generate a complete newsletter:
+
+```bash
+# Process all files and generate newsletter
+uv run -m synapse.main
+
+# Process only the map phase
+uv run -m synapse.main --phase map
+
+# Process only the reduce phase (using existing map outputs)
+uv run -m synapse.main --phase reduce
+```
+
+### Output
+
+- Map phase results: `./map_outputs/` (intermediate extracts)
+- Final newsletter: `./output/newsletter.md`
 
 ## Configuration
 
-All directories, model choices, and processing parameters are configurable through environment variables in your `.env` file:
+All settings can be configured through environment variables in your `.env` file:
 
 ### Input/Output Locations
-- `SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR`: Directory containing transcript files (default: `./transcripts_sample`)
+- `SYNAPSE_MAP_PHASE__MEETINGS_DIR`: Directory for meeting transcripts (default: `./data/meetings`)
+- `SYNAPSE_MAP_PHASE__TELEGRAM_DIR`: Directory for Telegram exports (default: `./data/telegram`)
 - `SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR`: Directory for map phase outputs (default: `./map_outputs`)
-- `SYNAPSE_REDUCE_PHASE__OUTPUT_PROFILES_DIR`: Directory for reduce phase profile outputs (default: `./profiles`)
+- `SYNAPSE_REDUCE_PHASE__OUTPUT_DIR`: Directory for final newsletter (default: `./output`)
 
 ### Model Selection
-- `SYNAPSE_MAP_PHASE__LLM_MODEL`: LLM model for map phase (default: `google-gla:gemini-2.5-flash-preview-04-17`)
-- `SYNAPSE_REDUCE_PHASE__LLM_MODEL`: LLM model for reduce phase (default: `google-gla:gemini-2.5-pro-preview-05-06`)
+- `SYNAPSE_MAP_PHASE__LLM_MODEL`: LLM model for extraction (default: `google-gla:gemini-2.5-flash-preview-04-17`)
+- `SYNAPSE_REDUCE_PHASE__LLM_MODEL`: LLM model for synthesis (default: `google-gla:gemini-2.5-flash-preview-04-17`)
 
 ### Performance Settings
-- `SYNAPSE_PROCESSING__CONCURRENCY`: Maximum concurrent transcript processing tasks (default: `5`)
+- `SYNAPSE_PROCESSING__CONCURRENCY`: Maximum concurrent processing tasks (default: `10`)
 
-The system will automatically create any output directories that don't exist.
+## Newsletter Structure
+
+The generated newsletter follows a structured template with sections for highlights, progress, discussions, heads-up items, human interest, and resources. The complete newsletter template is defined in [`src/synapse/agents.py`](src/synapse/agents.py) in the `NEWSLETTER_REDUCE_USER_MESSAGE_TEMPLATE`.
 
 ## Project Structure
 
 - `src/synapse/`: Main Python package
   - `main.py`: Core execution logic and entry point
   - `config.py`: Configuration management using Pydantic
-  - `agents.py`: LLM agent prompts and configurations
+  - `agents.py`: LLM agent configurations and newsletter templates
   - `processors/`: Map and reduce processing modules
+    - `map.py`: Extracts content from individual files
+    - `reduce.py`: Synthesizes final newsletter
+    - `extractors.py`: Extraction functions for different file types
+  - `parsers/`: File parsing utilities
+    - `telegram.py`: Telegram export parser
   - `exceptions.py`: Custom exception hierarchy
   - `logging.py`: Structured logging configuration
-- `transcripts_sample/`: Example directory for input transcript files
-- `SPEC.md`: Detailed project specification
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+uv run -m pytest
+
+# Run with verbose output
+uv run -m pytest -v
+```
+
+### Linting and Type Checking
+
+```bash
+# Run linter
+uv run ruff check src/
+
+# Auto-fix linting issues
+uv run ruff check --fix src/
+
+# Run type checking
+uv run pyright
+```
 
 ## License
 

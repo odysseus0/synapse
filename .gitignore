@@ -10,14 +10,29 @@ wheels/
 .venv
 
 # Input and output directories
+data/
+map_outputs/
+output/
 transcripts*/
-map_outputs*/
 profiles/
 
 # Keep directory structure with .gitkeep
 !*/.gitkeep
 
-# env
+# Environment files
 .env
 
+# IDE and system files
+.DS_Store
 **/.claude/settings.local.json
+.cursor/
+.vscode/
+
+# Python cache
+.pytest_cache/
+.ruff_cache/
+
+# Temporary files
+*.log
+*.tmp
+*~

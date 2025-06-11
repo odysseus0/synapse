@@ -6,10 +6,12 @@ allowing for typed configuration with environment variable and .env file support
 
 Configuration can be set via environment variables with the SYNAPSE_ prefix
 or in a .env file:
-- SYNAPSE_MAP_PHASE__INPUT_TRANSCRIPTS_DIR: Directory for transcript files
+- SYNAPSE_MAP_PHASE__MEETINGS_DIR: Directory for meeting transcript files
+- SYNAPSE_MAP_PHASE__TELEGRAM_DIR: Directory for Telegram export files
 - SYNAPSE_MAP_PHASE__OUTPUT_MAP_DIR: Directory for map phase outputs
 - SYNAPSE_MAP_PHASE__LLM_MODEL: LLM model for map phase
-- SYNAPSE_REDUCE_PHASE__OUTPUT_PROFILES_DIR: Directory for profile output files
+- SYNAPSE_REDUCE_PHASE__OUTPUT_DIR: Directory for newsletter output files
+- SYNAPSE_REDUCE_PHASE__LLM_MODEL: LLM model for reduce phase
 - SYNAPSE_PROCESSING__CONCURRENCY: Maximum concurrent processes
 
 Environment variables use double underscores (__) for nested config sections.
@@ -45,12 +47,9 @@ class ReducePhaseConfig(BaseModel):
     Configuration specific to the reduce phase.
 
     This model defines settings for combining map outputs into the final synthesized
-    profiles, including output location and LLM model specification.
+    newsletter, including output location and LLM model specification.
     """
 
-    output_profiles_dir: str = Field(
-        default='./profiles', description='Directory to save individual profile Markdown files'
-    )
     output_dir: str = Field(
         default='./output', description='Directory to save reduce phase outputs'
     )
